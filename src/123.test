@@ -1,0 +1,57 @@
+# 外卖系统 - 毕业设计
+
+## 技术栈
+- Spring Boot 3.5.13
+- JDK 18
+- MyBatis (原生)
+- MySQL 8.0
+- JWT
+- Ollama (DeepSeek R1 8B)
+- Vue 3 + Element Plus
+
+## 后端代码结构
+src/main/java/com/example/demo/
+├── common/           # 通用类
+│   └── Result.java   # 统一返回结果
+├── config/           # 配置类
+│   ├── OllamaConfig.java
+│   └── WebConfig.java
+├── controller/       # 控制器
+│   ├── AiController.java
+│   ├── OrderController.java
+│   ├── ProductController.java
+│   └── UserController.java
+├── dto/              # 数据传输对象
+├── entity/           # 实体类
+├── interceptor/      # 拦截器
+│   └── JwtInterceptor.java
+├── mapper/           # MyBatis Mapper
+├── service/          # 业务逻辑
+├── utils/            # 工具类
+│   ├── JwtUtil.java
+│   └── PasswordUtil.java
+└── Demo6Application.java
+
+## 核心接口
+| 接口 | 方法 | 说明 |
+|------|------|------|
+| /api/user/register | POST | 注册 |
+| /api/user/login | POST | 登录 |
+| /api/product/list | GET | 商品列表 |
+| /api/product/{id} | GET | 商品详情 |
+| /api/order/create | POST | 创建订单 |
+| /api/order/list | GET | 我的订单 |
+| /api/ai/chat | POST | AI客服 |
+
+## 数据库表
+- user
+- product
+- orders
+- order_item
+
+## 前端结构
+frontend/
+├── src/
+│   ├── api/          # API 接口
+│   ├── stores/       # Pinia 状态管理
+│   └── App.vue       # 主页面（单页面）
