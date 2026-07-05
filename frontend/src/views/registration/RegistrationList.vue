@@ -150,21 +150,31 @@ const rules = {
 }
 
 /**
+ * localDate - 获取本地日期字符串（YYYY-MM-DD），避免 UTC 时区偏移
+ */
+function localDate() {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+/**
  * availableSchedules - 计算属性：可用排班列表
  * 
  * 过滤条件：
  *   1. status === 1（正常排班，非停诊）
  *   2. remainNum > 0（有余号）
+ *   3. workDate === 今天（只显示当日排班）
  * 
  * 排序：按日期升序，同期按上午优先（AM在PM前面）
  * 
  * 数据流：
  *   scheduleList 变化时自动重新计算
  */
-const availableSchedules = computed(() =>
-  scheduleList.value.filter(s => s.status === 1 && s.remainNum > 0)
+const availableSchedules = computed(() => {
+  const today = localDate()
+  return scheduleList.value.filter(s => s.status === 1 && s.remainNum > 0 && s.workDate === today)
     .sort((a, b) => a.workDate.localeCompare(b.workDate) || a.period.localeCompare(b.period))
-)
+})
 
 // -- 辅助函数 --
 
@@ -214,7 +224,7 @@ function statusType(s) {
 async function loadRefs() {
   const [patients, schedules, doctors] = await Promise.all([
     patientApi.list({ page: 1, pageSize: 500 }),
-    scheduleApi.list({ page: 1, pageSize: 500, startDate: new Date().toISOString().slice(0, 10) }),
+    scheduleApi.list({ page: 1, pageSize: 500, startDate: localDate() }),
     doctorApi.list({ page: 1, pageSize: 200 }),
   ])
   patientList.value = patients.data.records

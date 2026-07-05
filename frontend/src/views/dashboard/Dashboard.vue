@@ -65,22 +65,59 @@
       </el-col>
     </el-row>
 
-    <!-- 待处理提醒面板：列表展示待办事项 -->
+    <!-- 待处理提醒面板 -->
     <div class="chart-card">
       <div class="chart-header">
         <span>待处理提醒</span>
         <el-tag size="small" type="warning">待办</el-tag>
       </div>
       <div class="todo-list">
-        <!-- 循环渲染待办事项，每项包含图标、文本、时间 -->
         <div class="todo-item" v-for="todo in todos" :key="todo.id">
           <el-icon :size="16" :color="todo.color"><WarningFilled /></el-icon>
           <span>{{ todo.text }}</span>
           <span class="todo-time">{{ todo.time }}</span>
         </div>
-        <!-- 无数据时的空状态提示 -->
         <div v-if="todos.length === 0" class="empty-hint">暂无待处理事项</div>
       </div>
+    </div>
+
+    <!--
+      我的排班卡片：仅医生角色可见
+      展示该医生今日及未来的出诊排班安排
+    -->
+    <div class="chart-card" v-if="userStore.user?.role === 'DOCTOR'">
+      <div class="chart-header">
+        <span>我的排班</span>
+        <el-tag size="small" type="primary">出诊安排</el-tag>
+      </div>
+      <!-- 有排班数据时展示表格 -->
+      <el-table :data="mySchedules" border v-if="mySchedules.length > 0" size="small">
+        <el-table-column prop="workDate" label="日期" width="120" align="center" />
+        <el-table-column label="时段" width="90" align="center">
+          <template #default="{ row }">
+            <el-tag :type="row.period === 'AM' ? 'primary' : 'warning'" size="small" effect="light">
+              {{ row.period === 'AM' ? '上午' : '下午' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="号源" width="150" align="center">
+          <template #default="{ row }">
+            <el-progress :percentage="row.totalNum ? Math.round((row.remainNum / row.totalNum) * 100) : 0"
+              :color="row.remainNum > 5 ? '#2775B6' : '#E74C3C'" :stroke-width="8" style="width:130px">
+              <span style="font-size:12px">{{ row.remainNum }}/{{ row.totalNum }}</span>
+            </el-progress>
+          </template>
+        </el-table-column>
+        <el-table-column label="状态" width="80" align="center">
+          <template #default="{ row }">
+            <el-tag :type="row.status === 1 ? 'success' : 'danger'" size="small" effect="light">
+              {{ row.status === 1 ? '正常' : '停诊' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+      </el-table>
+      <!-- 无排班时的空状态 -->
+      <div v-else class="empty-hint">今日暂无排班安排</div>
     </div>
   </div>
 </template>
@@ -89,7 +126,7 @@
 // -- 核心导入 --
 import { ref, computed, onMounted, nextTick } from 'vue'
 import { useUserStore } from '@/stores/user'
-import { dashboardApi } from '@/api'
+import { dashboardApi, scheduleApi } from '@/api'
 import * as echarts from 'echarts'
 import { WarningFilled } from '@element-plus/icons-vue'
 
@@ -121,6 +158,17 @@ let chart2 = null
 /** 远程仪表盘数据缓存 */
 const dashboardData = ref(null)
 const loading = ref(false)
+
+/** 医生本人的排班数据 */
+const mySchedules = ref([])
+
+/**
+ * localDate - 获取本地日期字符串（YYYY-MM-DD），避免 UTC 时区偏移
+ */
+function localDate() {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
 
 /**
  * stats - 统计卡片（从 API 数据计算）
@@ -233,10 +281,22 @@ async function fetchDashboard() {
   finally { loading.value = false }
 }
 
+/**
+ * fetchMySchedules - 医生角色获取本人排班
+ */
+async function fetchMySchedules() {
+  if (userStore.user?.role !== 'DOCTOR' || !userStore.user?.doctorId) return
+  try {
+    const res = await scheduleApi.list({ doctorId: userStore.user.doctorId, startDate: localDate(), pageSize: 50 })
+    mySchedules.value = res.data.records
+  } catch (e) { /* handled */ }
+}
+
 onMounted(async () => {
   await nextTick()
   initCharts()
   fetchDashboard()
+  fetchMySchedules()
 })
 </script>
 

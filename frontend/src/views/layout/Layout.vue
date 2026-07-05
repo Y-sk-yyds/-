@@ -74,8 +74,8 @@
             </div>
           </template>
         </el-menu-item>
-        <!-- 排班管理 -->
-        <el-menu-item index="/schedule">
+        <!-- 排班管理：仅管理员可见 -->
+        <el-menu-item index="/schedule" v-if="userStore.user?.role === 'ADMIN'">
           <template #title>
             <div class="menu-item">
               <el-icon :size="18"><Calendar /></el-icon>

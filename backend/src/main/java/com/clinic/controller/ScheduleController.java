@@ -1,8 +1,11 @@
 package com.clinic.controller;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.clinic.common.Result;
+import com.clinic.entity.Registration;
 import com.clinic.entity.Schedule;
+import com.clinic.mapper.RegistrationMapper;
 import com.clinic.service.ScheduleService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -31,10 +34,8 @@ import java.time.LocalDate;
 @RequiredArgsConstructor
 public class ScheduleController {
 
-    /**
-     * 排班服务 —— 由 Spring 通过 {@code @RequiredArgsConstructor} 自动注入。
-     */
     private final ScheduleService scheduleService;
+    private final RegistrationMapper registrationMapper;
 
     /**
      * 分页查询排班列表。
@@ -82,7 +83,8 @@ public class ScheduleController {
      * 新增排班信息。
      *
      * <p>
-     * 创建一条排班记录。关键逻辑：创建时自动将 <b>剩余号源数（remainNum）</b>
+     * 创建一条排班记录。创建前检查同一医生+日期+时段是否已存在排班，
+     * 防止重复排班。关键逻辑：创建时自动将 <b>剩余号源数（remainNum）</b>
      * 设置为与 <b>总号源数（totalNum）</b> 相同，表示初始状态所有号源均可用。
      * </p>
      *
@@ -92,10 +94,10 @@ public class ScheduleController {
      * <h4>请求参数（请求体 JSON）</h4>
      * <ul>
      *   <li><b>doctorId</b> (Long) — 医生ID</li>
-     *   <li><b>scheduleDate</b> (String, yyyy-MM-dd) — 排班日期</li>
-     *   <li><b>timeSlot</b> (String) — 时段（如 "上午"、"下午"）</li>
+     *   <li><b>workDate</b> (String, yyyy-MM-dd) — 排班日期</li>
+     *   <li><b>period</b> (String) — 时段（AM=上午, PM=下午）</li>
      *   <li><b>totalNum</b> (Integer) — 总号源数</li>
-     *   <li><b>fee</b> (BigDecimal) — 挂号费</li>
+     *   <li><b>status</b> (Integer) — 状态（1=正常, 0=停诊）</li>
      * </ul>
      *
      * <h4>返回值</h4>
@@ -106,9 +108,16 @@ public class ScheduleController {
      */
     @PostMapping
     public Result<Void> create(@RequestBody Schedule schedule) {
+        // 检查同一医生+日期+时段是否已有排班，防止重复
+        long count = scheduleService.count(new LambdaQueryWrapper<Schedule>()
+                .eq(Schedule::getDoctorId, schedule.getDoctorId())
+                .eq(Schedule::getWorkDate, schedule.getWorkDate())
+                .eq(Schedule::getPeriod, schedule.getPeriod()));
+        if (count > 0) {
+            return Result.error("该医生该时段已有排班，请勿重复创建");
+        }
         // 创建排班时，剩余号源数初始化为总号源数
         schedule.setRemainNum(schedule.getTotalNum());
-        // 调用 MyBatis-Plus 的 save 方法持久化
         scheduleService.save(schedule);
         return Result.ok();
     }
@@ -117,10 +126,14 @@ public class ScheduleController {
      * 更新排班信息。
      *
      * <p>
-     * 根据传入排班对象的 ID 定位目标记录，更新排班信息。
-     * 注意：如果总号源数被修改，可能需要同步调整剩余号源数，
-     * 当前实现仅执行简单更新，不自动处理号源数一致性。
+     * 根据传入排班对象的 ID 定位目标记录，更新可编辑字段（医生、日期、时段、
+     * 总号源数、状态）。剩余号源数（remainNum）不会被覆盖，而是根据总号源数
+     * 的变化量自动调整：
      * </p>
+     * <ul>
+     *   <li>增加总号源 → remainNum 同步增加</li>
+     *   <li>减少总号源 → remainNum 同步减少，但不低于 0</li>
+     * </ul>
      *
      * <h4>请求方式</h4>
      * <pre>{@code PUT /api/schedules}</pre>
@@ -128,7 +141,11 @@ public class ScheduleController {
      * <h4>请求参数（请求体 JSON）</h4>
      * <ul>
      *   <li><b>id</b> (Long, 必填) — 排班ID</li>
-     *   <li>其它需要更新的 {@link Schedule} 字段</li>
+     *   <li><b>doctorId</b> (Long) — 医生ID</li>
+     *   <li><b>workDate</b> (String) — 排班日期</li>
+     *   <li><b>period</b> (String) — 时段（AM/PM）</li>
+     *   <li><b>totalNum</b> (Integer) — 总号源数</li>
+     *   <li><b>status</b> (Integer) — 状态（1=正常, 0=停诊）</li>
      * </ul>
      *
      * <h4>返回值</h4>
@@ -139,8 +156,22 @@ public class ScheduleController {
      */
     @PutMapping
     public Result<Void> update(@RequestBody Schedule schedule) {
-        // 调用 MyBatis-Plus 的 updateById 方法按主键更新
-        scheduleService.updateById(schedule);
+        // 获取数据库中已有记录，保护 remainNum 不被覆盖
+        Schedule existing = scheduleService.getById(schedule.getId());
+        if (existing == null) {
+            return Result.error("排班不存在");
+        }
+        // 合并可编辑字段到已有记录上
+        existing.setDoctorId(schedule.getDoctorId());
+        existing.setWorkDate(schedule.getWorkDate());
+        existing.setPeriod(schedule.getPeriod());
+        existing.setStatus(schedule.getStatus());
+        // 处理总号源变化：remainNum 同步增减
+        int delta = schedule.getTotalNum() - existing.getTotalNum();
+        existing.setTotalNum(schedule.getTotalNum());
+        existing.setRemainNum(Math.max(0, Math.min(existing.getRemainNum() + delta, schedule.getTotalNum())));
+        // 更新全部字段（此时 remainNum 已正确）
+        scheduleService.updateById(existing);
         return Result.ok();
     }
 
@@ -148,8 +179,8 @@ public class ScheduleController {
      * 删除排班信息。
      *
      * <p>
-     * 根据排班 ID 删除对应记录。
-     * 注意：如果该排班下已有患者挂号记录，删除操作可能失败。
+     * 根据排班 ID 删除对应记录。删除前校验该排班下是否存在已挂号记录，
+     * 如有则拒绝删除，必须先取消或处理所有挂号记录。
      * </p>
      *
      * <h4>请求方式</h4>
@@ -168,7 +199,13 @@ public class ScheduleController {
      */
     @DeleteMapping("/{id}")
     public Result<Void> delete(@PathVariable Long id) {
-        // 调用 MyBatis-Plus 的 removeById 按主键删除
+        // 检查该排班下是否有已挂号记录（status=1），有则拒绝删除
+        long regCount = registrationMapper.selectCount(new LambdaQueryWrapper<Registration>()
+                .eq(Registration::getScheduleId, id)
+                .eq(Registration::getStatus, 1));
+        if (regCount > 0) {
+            return Result.error("该排班下存在 " + regCount + " 条已挂号记录，请先取消挂号后再删除");
+        }
         scheduleService.removeById(id);
         return Result.ok();
     }

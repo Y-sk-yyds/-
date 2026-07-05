@@ -39,6 +39,6 @@
         <if test="scheduleDoctorId != null">
             AND s.doctor_id = #{scheduleDoctorId}
         </if>
-        ORDER BY r.queue_num ASC
+        ORDER BY s.work_date ASC, r.queue_num ASC
     </select>
 </mapper>

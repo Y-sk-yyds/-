@@ -24,6 +24,7 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import ElementPlus from 'element-plus'
+import zhCn from 'element-plus/dist/locale/zh-cn.mjs'   // 中文语言包
 import 'element-plus/dist/index.css'       // Element Plus 全局样式
 import '@/assets/theme.css'                 // 项目自定义主题色变量
 import * as ElementPlusIconsVue from '@element-plus/icons-vue'
@@ -51,8 +52,8 @@ app.use(createPinia())
 app.use(router)
 
 // 注册 Element Plus UI 组件库
-// 使所有 Element Plus 组件（如 el-button, el-table, el-dialog 等）全局可用
-app.use(ElementPlus)
+// 配置中文语言包，日期选择器等组件显示中文
+app.use(ElementPlus, { locale: zhCn })
 
 // 将 Vue 应用挂载到 public/index.html 中的 <div id="app"></div> 元素上
 // 挂载后应用开始渲染，路由守卫生效

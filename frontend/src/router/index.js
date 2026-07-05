@@ -73,12 +73,15 @@ const routes = [
         component: () => import('@/views/doctor/DoctorList.vue'),
         meta: { title: '医生管理' }
       },
-      // ---- 排班管理 ----
+      // ---- 排班管理（管理员专用） ----
       {
         path: 'schedule',
         name: 'Schedule',
         component: () => import('@/views/schedule/ScheduleList.vue'),
-        meta: { title: '排班管理' }
+        meta: {
+          title: '排班管理',
+          roles: ['ADMIN']
+        }
       },
       // ---- 挂号管理 ----
       {
@@ -164,10 +167,22 @@ router.beforeEach((to, from, next) => {
   // 未认证用户试图访问非登录页 → 重定向到登录页
   if (to.path !== '/login' && !token) {
     next('/login')
-  } else {
-    // 已登录或访问的是登录页 → 正常放行
-    next()
+    return
   }
+  // 角色校验：如果路由配置了 roles，检查当前用户角色是否匹配
+  if (to.meta.roles && token) {
+    try {
+      const user = JSON.parse(localStorage.getItem('user') || '{}')
+      if (!to.meta.roles.includes(user.role)) {
+        next('/dashboard')
+        return
+      }
+    } catch (e) {
+      next('/dashboard')
+      return
+    }
+  }
+  next()
 })
 
 // 导出路由实例，供 main.js 中的 app.use(router) 使用
