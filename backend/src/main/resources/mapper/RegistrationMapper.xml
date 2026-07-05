@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.clinic.mapper.RegistrationMapper">
+
+    <resultMap id="RegistrationVOMap" type="com.clinic.vo.RegistrationVO">
+        <id column="id" property="id"/>
+        <result column="patient_id" property="patientId"/>
+        <result column="schedule_id" property="scheduleId"/>
+        <result column="queue_num" property="queueNum"/>
+        <result column="status" property="status"/>
+        <result column="registration_date" property="registrationDate"/>
+        <result column="remark" property="remark"/>
+        <result column="create_time" property="createTime"/>
+        <result column="patientName" property="patientName"/>
+        <result column="doctorName" property="doctorName"/>
+        <result column="department" property="department"/>
+        <result column="workDateStr" property="workDateStr"/>
+        <result column="periodLabel" property="periodLabel"/>
+    </resultMap>
+
+    <select id="selectRegistrationPage" resultMap="RegistrationVOMap">
+        SELECT r.*,
+               p.name AS patientName,
+               d.name AS doctorName,
+               d.department,
+               s.work_date AS workDateStr,
+               CASE s.period WHEN 'AM' THEN '上午' WHEN 'PM' THEN '下午' END AS periodLabel
+        FROM registration r
+        LEFT JOIN patient p ON r.patient_id = p.id
+        LEFT JOIN schedule s ON r.schedule_id = s.id
+        LEFT JOIN doctor d ON s.doctor_id = d.id
+        WHERE r.deleted = 0
+        <if test="patientId != null">
+            AND r.patient_id = #{patientId}
+        </if>
+        <if test="status != null">
+            AND r.status = #{status}
+        </if>
+        <if test="scheduleDoctorId != null">
+            AND s.doctor_id = #{scheduleDoctorId}
+        </if>
+        ORDER BY r.queue_num ASC
+    </select>
+</mapper>
