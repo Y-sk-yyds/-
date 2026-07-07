@@ -9,11 +9,11 @@ import com.clinic.mapper.PrescriptionDrugMapper;
 import com.clinic.mapper.PrescriptionMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
-import java.util.UUID;
 
 /**
  * 处方服务类
@@ -44,8 +44,8 @@ public class PrescriptionService extends ServiceImpl<PrescriptionMapper, Prescri
     /** 药品库存服务，用于查询和更新库存 */
     private final DrugStockService drugStockService;
 
-    /** Redis 模板，用于分布式锁操作 */
-    private final RedisTemplate<String, Object> redisTemplate;
+    /** Redis String 模板，用于分布式锁（纯字符串，无序列化问题） */
+    private final StringRedisTemplate stringRedisTemplate;
 
     /** Redis 分布式锁 Key 前缀，实际 Key 格式为 drug:lock:{drugId} */
     private static final String STOCK_LOCK_PREFIX = "drug:lock:";
@@ -130,18 +130,13 @@ public class PrescriptionService extends ServiceImpl<PrescriptionMapper, Prescri
      * @param quantity 扣减数量
      * @throws IllegalArgumentException 获取锁超时（系统繁忙）或库存不足时抛出
      */
-    private void deductStock(Long drugId, int quantity) {
+    void deductStock(Long drugId, int quantity) {
         // 构建锁 Key
         String lockKey = STOCK_LOCK_PREFIX + drugId;
 
-        // 生成唯一锁标识值（UUID），用于安全释放锁
-        String lockValue = UUID.randomUUID().toString();
-
         try {
             // ===== 尝试获取分布式锁（SETNX + 过期时间） =====
-            // SETIFABSENT: 仅当 Key 不存在时设置成功，达到互斥效果
-            // Duration.ofSeconds(3): 锁自动过期时间，防止死锁
-            Boolean locked = redisTemplate.opsForValue().setIfAbsent(lockKey, lockValue, Duration.ofSeconds(3));
+            Boolean locked = stringRedisTemplate.opsForValue().setIfAbsent(lockKey, "1", Duration.ofSeconds(3));
             if (Boolean.FALSE.equals(locked)) {
                 // 获取锁失败，说明有其他线程正在操作该药品库存
                 throw new IllegalArgumentException("系统繁忙，请稍后重试");
@@ -163,12 +158,7 @@ public class PrescriptionService extends ServiceImpl<PrescriptionMapper, Prescri
                     .update();
 
         } finally {
-            // ===== 释放锁（安全释放） =====
-            // 只有当锁的值仍然匹配时才删除，避免误删其他线程新获取的锁
-            // （例如：当前线程因 GC 暂停导致锁过期，其他线程获取了新锁）
-            if (lockValue.equals(redisTemplate.opsForValue().get(lockKey))) {
-                redisTemplate.delete(lockKey);
-            }
+            stringRedisTemplate.delete(lockKey);
         }
     }
 }

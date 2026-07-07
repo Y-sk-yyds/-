@@ -47,9 +47,9 @@ class MiddlewareIntegrationTest {
     void testRabbitMQAsync() throws Exception {
         HttpHeaders h = authHeaders();
 
-        // 1. 挂号
+        // 1. 挂号（用 seed 数据的患者1 + 排班1：张医生 今天上午）
         var regResp = rest.postForEntity("/api/registrations",
-                new HttpEntity<>(Map.of("patientId", 5, "scheduleId", 9), h), Map.class);
+                new HttpEntity<>(Map.of("patientId", 1, "scheduleId", 1), h), Map.class);
         assertEquals(200, ((Map<?, ?>) regResp.getBody()).get("code"));
         int regId = (Integer) ((Map<?, ?>) regResp.getBody().get("data")).get("id");
         log.info("1.挂号 ID={}", regId);
@@ -86,12 +86,15 @@ class MiddlewareIntegrationTest {
     @DisplayName("[Redis] Lua原子扣减号源，并发不超卖")
     void testRedisLuaAtomic() throws Exception {
         HttpHeaders h = authHeaders();
-        long schId = 16L; // 张医生 7/7 上午，30个号源，未使用
+        long schId = 2L; // 张医生 今天下午，30个号源
         int totalRequests = 35;
 
         AtomicInteger success = new AtomicInteger(0);
         AtomicInteger failure = new AtomicInteger(0);
         CountDownLatch latch = new CountDownLatch(totalRequests);
+
+        AtomicInteger failByMsg = new AtomicInteger(0);
+        java.util.concurrent.atomic.AtomicReference<String> firstError = new java.util.concurrent.atomic.AtomicReference<>();
 
         for (int i = 0; i < totalRequests; i++) {
             final int pid = 100 + i; // 确保不重复
@@ -101,9 +104,15 @@ class MiddlewareIntegrationTest {
                             new HttpEntity<>(Map.of("patientId", pid, "scheduleId", schId), h), Map.class);
                     int code = (Integer) ((Map<?, ?>) resp.getBody()).get("code");
                     if (code == 200) success.incrementAndGet();
-                    else failure.incrementAndGet();
+                    else {
+                        failure.incrementAndGet();
+                        String msg = (String) ((Map<?, ?>) resp.getBody()).get("message");
+                        firstError.compareAndSet(null, "code=" + code + " msg=" + msg);
+                    }
                 } catch (Exception e) {
                     failure.incrementAndGet();
+                    failByMsg.incrementAndGet();
+                    firstError.compareAndSet(null, "Exception: " + e.getClass().getSimpleName() + " - " + e.getMessage());
                 } finally {
                     latch.countDown();
                 }
@@ -111,6 +120,8 @@ class MiddlewareIntegrationTest {
         }
 
         latch.await();
+        if (firstError.get() != null) log.warn("失败详情: {}", firstError.get());
+        log.info("失败中因异常: {} 个", failByMsg.get());
         int succ = success.get();
         int fail = failure.get();
         log.info("并发{}请求: 成功{}个, 被拒{}个", totalRequests, succ, fail);

@@ -1,6 +1,13 @@
 -- ============================================
 -- 社区诊所门诊诊疗管理系统 数据库初始化脚本
 -- ============================================
+--
+-- 重要：运行此脚本后，务必清空 Redis 缓存！
+-- Linux/Mac: docker exec clinic-redis redis-cli FLUSHDB
+-- Windows:  docker exec clinic-redis redis-cli FLUSHDB
+-- 或直接运行项目根目录的 reset.bat
+--
+-- ============================================
 
 CREATE DATABASE IF NOT EXISTS clinic_db
     DEFAULT CHARACTER SET utf8mb4
@@ -245,6 +252,27 @@ CREATE TABLE `medical_record` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='电子病历表';
 
 -- ============================================
+-- 13. 复诊提醒表
+-- ============================================
+DROP TABLE IF EXISTS `reminder`;
+CREATE TABLE `reminder` (
+    `id`              BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键',
+    `patient_id`      BIGINT       NOT NULL COMMENT '患者ID',
+    `consultation_id` BIGINT       NOT NULL COMMENT '就诊ID',
+    `doctor_id`       BIGINT       NOT NULL COMMENT '医生ID',
+    `remind_date`     DATE         NOT NULL COMMENT '应复诊日期',
+    `content`         VARCHAR(500) NOT NULL COMMENT '提醒内容',
+    `status`          TINYINT      DEFAULT 0 COMMENT '状态: 0待提醒 1已提醒 2已复诊',
+    `create_time`     DATETIME     DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `update_time`     DATETIME     DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    `deleted`         TINYINT      DEFAULT 0 COMMENT '逻辑删除',
+    PRIMARY KEY (`id`),
+    KEY `idx_remind_date` (`remind_date`),
+    KEY `idx_patient_id` (`patient_id`),
+    KEY `idx_doctor_id` (`doctor_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='复诊提醒表';
+
+-- ============================================
 -- 初始数据: 管理员账号 admin/admin123
 -- ============================================
 -- 初始密码均为 admin123 (BCrypt加密)
@@ -257,3 +285,50 @@ INSERT INTO `sys_user` (`username`, `password`, `real_name`, `role`, `status`) V
 INSERT INTO `doctor` (`name`, `department`, `title`, `phone`, `introduction`, `user_id`) VALUES
 ('张医生', '内科',   '主任医师', '13800001111', '从事内科临床工作20年，擅长心血管疾病诊治', 2),
 ('李医生', '儿科',   '副主任医师', '13800002222', '从事儿科临床工作15年，擅长儿童呼吸系统疾病', 3);
+
+-- ============================================
+-- 患者种子数据
+-- ============================================
+INSERT INTO `patient` (`name`, `phone`, `age`, `gender`, `allergy_history`, `address`) VALUES
+('张三',   '13800001101', 35, 'M', '无',                '朝阳区建国路100号'),
+('李四',   '13800001102', 28, 'F', '青霉素过敏',         '海淀区中关村大街1号'),
+('王五',   '13800001103', 45, 'M', '无',                '西城区金融街10号'),
+('赵六',   '13800001104', 52, 'F', '磺胺类过敏',         '东城区王府井大街20号'),
+('孙七',   '13800001105', 8,  'M', '无',                '朝阳区望京街道5号'),
+('周八',   '13800001106', 19, 'F', '花粉过敏',           '丰台区方庄路15号'),
+('吴九',   '13800001107', 62, 'M', '无',                '通州区梨园镇8号'),
+('郑十',   '13800001108', 31, 'F', '头孢类过敏',         '大兴区亦庄经济开发区3号');
+
+-- ============================================
+-- 排班种子数据（今明两天，两位医生，上午+下午）
+-- ============================================
+INSERT INTO `schedule` (`doctor_id`, `work_date`, `period`, `total_num`, `remain_num`, `status`) VALUES
+-- 张医生(doctor_id=1) 今明两天
+(1, CURDATE(),           'AM', 30, 30, 1),
+(1, CURDATE(),           'PM', 30, 30, 1),
+(1, DATE_ADD(CURDATE(), INTERVAL 1 DAY), 'AM', 30, 30, 1),
+(1, DATE_ADD(CURDATE(), INTERVAL 1 DAY), 'PM', 30, 30, 1),
+-- 李医生(doctor_id=2) 今明两天
+(2, CURDATE(),           'AM', 30, 30, 1),
+(2, CURDATE(),           'PM', 30, 30, 1),
+(2, DATE_ADD(CURDATE(), INTERVAL 1 DAY), 'AM', 30, 30, 1),
+(2, DATE_ADD(CURDATE(), INTERVAL 1 DAY), 'PM', 30, 30, 1);
+
+-- ============================================
+-- 药品种子数据
+-- ============================================
+INSERT INTO `drug` (`name`, `specification`, `unit`, `unit_price`, `category`) VALUES
+('阿莫西林胶囊',    '0.5g×24粒',  '盒', 18.50, '抗生素'),
+('布洛芬缓释胶囊',   '0.3g×20粒',  '盒', 15.00, '解热镇痛'),
+('蒙脱石散',         '3g×10袋',    '盒', 22.00, '消化系统'),
+('复方氨酚烷胺片',   '12片',       '盒', 8.50,  '感冒用药'),
+('氯雷他定片',       '10mg×6片',   '盒', 12.00, '抗过敏'),
+('维生素C片',        '100mg×100片', '瓶', 9.90,  '维生素类');
+
+INSERT INTO `drug_stock` (`drug_id`, `current_stock`, `warning_threshold`) VALUES
+(1, 200, 20),
+(2, 150, 15),
+(3, 80,  10),
+(4, 300, 25),
+(5, 100, 10),
+(6, 500, 30);
