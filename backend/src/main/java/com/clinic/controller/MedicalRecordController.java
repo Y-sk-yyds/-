@@ -1,8 +1,10 @@
 package com.clinic.controller;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.clinic.common.ForbiddenException;
 import com.clinic.common.Result;
 import com.clinic.entity.MedicalRecord;
+import com.clinic.security.SecurityUtils;
 import com.clinic.service.MedicalRecordService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
@@ -49,6 +51,17 @@ public class MedicalRecordController {
     private final MedicalRecordService recordService;
 
     /**
+     * 权限校验：收银员无权查看病历。
+     * ADMIN 和 DOCTOR 可访问。
+     */
+    private void checkRecordAccess() {
+        String role = SecurityUtils.getCurrentRole();
+        if ("CASHIER".equals(role)) {
+            throw new ForbiddenException("收银员无权查看病历");
+        }
+    }
+
+    /**
      * 分页查询病历列表（隐去详细内容以保护隐私）。
      *
      * <p>
@@ -83,6 +96,8 @@ public class MedicalRecordController {
     public Result<IPage<MedicalRecord>> list(@RequestParam(defaultValue = "1") Integer page,
                                               @RequestParam(defaultValue = "10") Integer pageSize,
                                               @RequestParam(required = false) Long patientId) {
+        // 权限校验：收银员无权查看病历列表
+        checkRecordAccess();
         // 委托 recordService 执行分页查询
         IPage<MedicalRecord> result = recordService.pageQuery(page, pageSize, patientId);
         // 隐私保护：列表不返回加密的病历详细内容
@@ -119,6 +134,8 @@ public class MedicalRecordController {
      */
     @GetMapping("/{id}")
     public Result<MedicalRecord> detail(@PathVariable Long id) {
+        // 权限校验：收银员无权查看病历详情
+        checkRecordAccess();
         // 调用 recordService 的解密方法，将加密内容还原为明文
         return Result.ok(recordService.getDecrypted(id));
     }
@@ -155,6 +172,8 @@ public class MedicalRecordController {
      */
     @PostMapping
     public Result<MedicalRecord> create(@RequestBody Map<String, Object> body) {
+        // 权限校验：收银员无权创建病历
+        checkRecordAccess();
         // 委托 recordService 创建病历，内容在服务层自动加密
         return Result.ok(recordService.create(
                 Long.valueOf(body.get("patientId").toString()),

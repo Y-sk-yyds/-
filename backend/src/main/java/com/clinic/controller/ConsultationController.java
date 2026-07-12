@@ -2,6 +2,7 @@ package com.clinic.controller;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.clinic.common.ForbiddenException;
 import com.clinic.common.Result;
 import com.clinic.config.RabbitMQConfig;
 import com.clinic.dto.ReminderMessage;
@@ -54,6 +55,12 @@ public class ConsultationController {
     private final RegistrationService registrationService;
     private final RabbitTemplate rabbitTemplate;
 
+    private void requireRole(String... roles) {
+        String currentRole = SecurityUtils.getCurrentRole();
+        for (String role : roles) if (role.equals(currentRole)) return;
+        throw new ForbiddenException("权限不足，当前角色：" + currentRole);
+    }
+
     /**
      * 分页查询就诊列表。
      *
@@ -91,6 +98,7 @@ public class ConsultationController {
                                              @RequestParam(defaultValue = "10") Integer pageSize,
                                              @RequestParam(required = false) Long doctorId,
                                              @RequestParam(required = false) Integer status) {
+        requireRole("ADMIN", "DOCTOR");
         // 当前医生只能看自己的就诊记录——强制使用当前登录医生ID覆盖参数
         Long userId = SecurityUtils.getCurrentUserId();
         Doctor doctor = doctorMapper.selectOne(
@@ -183,6 +191,7 @@ public class ConsultationController {
 
     @PutMapping("/{id}/complete")
     public Result<Void> complete(@PathVariable Long id, @RequestBody Map<String, String> body) {
+        requireRole("ADMIN", "DOCTOR");
         String complaint = body.get("complaint");
         String diagnosis = body.get("diagnosis");
         String advice = body.get("advice");

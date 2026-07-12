@@ -2,10 +2,12 @@ package com.clinic.controller;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.clinic.common.ForbiddenException;
 import com.clinic.common.Result;
 import com.clinic.entity.Registration;
 import com.clinic.entity.Schedule;
 import com.clinic.mapper.RegistrationMapper;
+import com.clinic.security.SecurityUtils;
 import com.clinic.service.ScheduleService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -36,6 +38,12 @@ public class ScheduleController {
 
     private final ScheduleService scheduleService;
     private final RegistrationMapper registrationMapper;
+
+    private void requireRole(String... roles) {
+        String currentRole = SecurityUtils.getCurrentRole();
+        for (String role : roles) if (role.equals(currentRole)) return;
+        throw new ForbiddenException("权限不足，当前角色：" + currentRole);
+    }
 
     /**
      * 分页查询排班列表。
@@ -108,6 +116,7 @@ public class ScheduleController {
      */
     @PostMapping
     public Result<Void> create(@RequestBody Schedule schedule) {
+        requireRole("ADMIN");
         // 检查同一医生+日期+时段是否已有排班，防止重复
         long count = scheduleService.count(new LambdaQueryWrapper<Schedule>()
                 .eq(Schedule::getDoctorId, schedule.getDoctorId())
@@ -156,6 +165,7 @@ public class ScheduleController {
      */
     @PutMapping
     public Result<Void> update(@RequestBody Schedule schedule) {
+        requireRole("ADMIN");
         // 获取数据库中已有记录，保护 remainNum 不被覆盖
         Schedule existing = scheduleService.getById(schedule.getId());
         if (existing == null) {
@@ -199,6 +209,7 @@ public class ScheduleController {
      */
     @DeleteMapping("/{id}")
     public Result<Void> delete(@PathVariable Long id) {
+        requireRole("ADMIN");
         // 检查该排班下是否有已挂号记录（status=1），有则拒绝删除
         long regCount = registrationMapper.selectCount(new LambdaQueryWrapper<Registration>()
                 .eq(Registration::getScheduleId, id)

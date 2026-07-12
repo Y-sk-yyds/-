@@ -1,8 +1,10 @@
 package com.clinic.controller;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.clinic.common.ForbiddenException;
 import com.clinic.common.Result;
 import com.clinic.entity.Patient;
+import com.clinic.security.SecurityUtils;
 import com.clinic.service.PatientService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
@@ -30,6 +32,12 @@ public class PatientController {
      * 患者服务 —— 由 Spring 通过 {@code @RequiredArgsConstructor} 自动注入。
      */
     private final PatientService patientService;
+
+    private void requireRole(String... roles) {
+        String currentRole = SecurityUtils.getCurrentRole();
+        for (String role : roles) if (role.equals(currentRole)) return;
+        throw new ForbiddenException("权限不足，当前角色：" + currentRole);
+    }
 
     /**
      * 分页查询患者列表。
@@ -107,6 +115,8 @@ public class PatientController {
      */
     @PostMapping
     public Result<Void> create(@RequestBody Patient patient) {
+        // 收银员可创建初诊患者，医生和管理员可创建所有患者
+        requireRole("ADMIN", "DOCTOR", "CASHIER");
         // 直接调用 MyBatis-Plus 的 save 方法持久化患者数据
         patientService.save(patient);
         return Result.ok();
@@ -137,6 +147,7 @@ public class PatientController {
      */
     @PutMapping
     public Result<Void> update(@RequestBody Patient patient) {
+        requireRole("ADMIN", "DOCTOR");
         // 调用 MyBatis-Plus 的 updateById 方法按主键更新
         patientService.updateById(patient);
         return Result.ok();
@@ -167,6 +178,7 @@ public class PatientController {
      */
     @DeleteMapping("/{id}")
     public Result<Void> delete(@PathVariable Long id) {
+        requireRole("ADMIN", "DOCTOR");
         // 调用 MyBatis-Plus 的 removeById 按主键删除
         patientService.removeById(id);
         return Result.ok();

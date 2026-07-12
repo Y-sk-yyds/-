@@ -52,7 +52,7 @@
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="createTime" label="创建时间" width="160" />
+      <el-table-column prop="createTime" label="创建时间" width="160" :formatter="formatTime" />
       <el-table-column label="操作" width="100" fixed="right">
         <template #default="{ row }">
           <el-button type="primary" link @click="viewDetail(row.id)">查看</el-button>
@@ -155,6 +155,15 @@ async function fetchData() {
     total.value = res.data.total
   } catch (e) { /* handled */ }
   finally { loading.value = false }
+}
+
+function formatTime(row, column, value) {
+  if (!value) return '-'
+  if (Array.isArray(value)) {
+    const [y, m, d, h = 0, min = 0] = value
+    return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')} ${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`
+  }
+  return value
 }
 
 /**

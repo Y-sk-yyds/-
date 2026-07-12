@@ -2,8 +2,10 @@ package com.clinic.controller;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.clinic.common.ForbiddenException;
 import com.clinic.common.Result;
 import com.clinic.entity.User;
+import com.clinic.security.SecurityUtils;
 import com.clinic.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -57,6 +59,12 @@ public class UserController {
      */
     private final PasswordEncoder passwordEncoder;
 
+    private void requireRole(String... roles) {
+        String currentRole = SecurityUtils.getCurrentRole();
+        for (String role : roles) if (role.equals(currentRole)) return;
+        throw new ForbiddenException("权限不足，当前角色：" + currentRole);
+    }
+
     /**
      * 分页查询用户列表。
      *
@@ -82,6 +90,7 @@ public class UserController {
     @GetMapping
     public Result<IPage<User>> list(@RequestParam(defaultValue = "1") Integer page,
                                      @RequestParam(defaultValue = "10") Integer pageSize) {
+        requireRole("ADMIN");
         // 使用 MyBatis-Plus 的分页对象执行无条件分页查询
         return Result.ok(userService.page(new Page<>(page, pageSize)));
     }
@@ -116,6 +125,7 @@ public class UserController {
      */
     @PostMapping
     public Result<Void> create(@RequestBody Map<String, Object> body) {
+        requireRole("ADMIN");
         // 从请求体构建用户实体对象
         User user = new User();
         user.setUsername((String) body.get("username"));
@@ -162,6 +172,7 @@ public class UserController {
      */
     @PutMapping
     public Result<Void> update(@RequestBody User user) {
+        requireRole("ADMIN");
         // 安全措施：更新时不修改密码，将 password 置为 null
         // MyBatis-Plus 的 updateById 默认会跳过 null 字段（取决于更新策略配置）
         user.setPassword(null);
@@ -194,6 +205,7 @@ public class UserController {
      */
     @PutMapping("/{id}/toggle-status")
     public Result<Void> toggleStatus(@PathVariable Long id) {
+        requireRole("ADMIN");
         // 查询用户记录
         User user = userService.getById(id);
         if (user != null) {

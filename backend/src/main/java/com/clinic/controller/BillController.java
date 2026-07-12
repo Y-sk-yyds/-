@@ -1,8 +1,10 @@
 package com.clinic.controller;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.clinic.common.ForbiddenException;
 import com.clinic.common.Result;
 import com.clinic.entity.Bill;
+import com.clinic.security.SecurityUtils;
 import com.clinic.service.BillService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
@@ -44,6 +46,12 @@ public class BillController {
      */
     private final BillService billService;
 
+    private void requireRole(String... roles) {
+        String currentRole = SecurityUtils.getCurrentRole();
+        for (String role : roles) if (role.equals(currentRole)) return;
+        throw new ForbiddenException("权限不足，当前角色：" + currentRole);
+    }
+
     /**
      * 分页查询账单列表。
      *
@@ -72,6 +80,7 @@ public class BillController {
     public Result<IPage<Bill>> list(@RequestParam(defaultValue = "1") Integer page,
                                      @RequestParam(defaultValue = "10") Integer pageSize,
                                      @RequestParam(required = false) Integer status) {
+        requireRole("ADMIN", "CASHIER");
         // 委托 BillService 执行带条件的分页查询
         return Result.ok(billService.pageQuery(page, pageSize, status));
     }
@@ -103,6 +112,7 @@ public class BillController {
      */
     @PostMapping
     public Result<Bill> create(@RequestBody Map<String, Long> body) {
+        requireRole("ADMIN", "CASHIER");
         // 委托 BillService 创建账单并计算费用
         return Result.ok(billService.createBill(body.get("registrationId"), body.get("prescriptionId")));
     }
@@ -137,6 +147,7 @@ public class BillController {
      */
     @PutMapping("/{id}/pay")
     public Result<Void> pay(@PathVariable Long id, @RequestBody Map<String, String> body) {
+        requireRole("ADMIN", "CASHIER");
         // 委托 BillService 处理支付确认（更新状态、记录支付方式和时间）
         billService.pay(id, body.get("paymentMethod"));
         return Result.ok();

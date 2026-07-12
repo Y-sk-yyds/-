@@ -55,6 +55,17 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * 处理权限不足异常
+     *
+     * <p>当用户角色无权执行该操作时抛出 ForbiddenException，
+     * 返回 HTTP 403 状态码。</p>
+     */
+    @ExceptionHandler(ForbiddenException.class)
+    public Result<?> handleForbidden(ForbiddenException e) {
+        return Result.error(403, e.getMessage());
+    }
+
+    /**
      * 处理运行时异常
      *
      * <p>拦截所有 {@link RuntimeException} 及其子类异常（除已被更具体的

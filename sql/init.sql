@@ -300,35 +300,132 @@ INSERT INTO `patient` (`name`, `phone`, `age`, `gender`, `allergy_history`, `add
 ('郑十',   '13800001108', 31, 'F', '头孢类过敏',         '大兴区亦庄经济开发区3号');
 
 -- ============================================
--- 排班种子数据（今明两天，两位医生，上午+下午）
+-- 排班种子数据（一周，两位医生，每天上午+下午）
 -- ============================================
 INSERT INTO `schedule` (`doctor_id`, `work_date`, `period`, `total_num`, `remain_num`, `status`) VALUES
--- 张医生(doctor_id=1) 今明两天
-(1, CURDATE(),           'AM', 30, 30, 1),
-(1, CURDATE(),           'PM', 30, 30, 1),
-(1, DATE_ADD(CURDATE(), INTERVAL 1 DAY), 'AM', 30, 30, 1),
-(1, DATE_ADD(CURDATE(), INTERVAL 1 DAY), 'PM', 30, 30, 1),
--- 李医生(doctor_id=2) 今明两天
-(2, CURDATE(),           'AM', 30, 30, 1),
-(2, CURDATE(),           'PM', 30, 30, 1),
-(2, DATE_ADD(CURDATE(), INTERVAL 1 DAY), 'AM', 30, 30, 1),
-(2, DATE_ADD(CURDATE(), INTERVAL 1 DAY), 'PM', 30, 30, 1);
+-- 张医生(doctor_id=1) 今起7天
+(1, CURDATE(),                          'AM', 30, 30, 1),
+(1, CURDATE(),                          'PM', 30, 30, 1),
+(1, DATE_ADD(CURDATE(), INTERVAL 1 DAY),  'AM', 30, 30, 1),
+(1, DATE_ADD(CURDATE(), INTERVAL 1 DAY),  'PM', 30, 30, 1),
+(1, DATE_ADD(CURDATE(), INTERVAL 2 DAY),  'AM', 30, 30, 1),
+(1, DATE_ADD(CURDATE(), INTERVAL 2 DAY),  'PM', 30, 30, 1),
+(1, DATE_ADD(CURDATE(), INTERVAL 3 DAY),  'AM', 30, 30, 1),
+(1, DATE_ADD(CURDATE(), INTERVAL 3 DAY),  'PM', 30, 30, 1),
+(1, DATE_ADD(CURDATE(), INTERVAL 4 DAY),  'AM', 30, 30, 1),
+(1, DATE_ADD(CURDATE(), INTERVAL 4 DAY),  'PM', 30, 30, 1),
+(1, DATE_ADD(CURDATE(), INTERVAL 5 DAY),  'AM', 30, 30, 1),
+(1, DATE_ADD(CURDATE(), INTERVAL 5 DAY),  'PM', 30, 30, 1),
+(1, DATE_ADD(CURDATE(), INTERVAL 6 DAY),  'AM', 30, 30, 1),
+(1, DATE_ADD(CURDATE(), INTERVAL 6 DAY),  'PM', 30, 30, 1),
+-- 李医生(doctor_id=2) 今起7天
+(2, CURDATE(),                          'AM', 30, 30, 1),
+(2, CURDATE(),                          'PM', 30, 30, 1),
+(2, DATE_ADD(CURDATE(), INTERVAL 1 DAY),  'AM', 30, 30, 1),
+(2, DATE_ADD(CURDATE(), INTERVAL 1 DAY),  'PM', 30, 30, 1),
+(2, DATE_ADD(CURDATE(), INTERVAL 2 DAY),  'AM', 30, 30, 1),
+(2, DATE_ADD(CURDATE(), INTERVAL 2 DAY),  'PM', 30, 30, 1),
+(2, DATE_ADD(CURDATE(), INTERVAL 3 DAY),  'AM', 30, 30, 1),
+(2, DATE_ADD(CURDATE(), INTERVAL 3 DAY),  'PM', 30, 30, 1),
+(2, DATE_ADD(CURDATE(), INTERVAL 4 DAY),  'AM', 30, 30, 1),
+(2, DATE_ADD(CURDATE(), INTERVAL 4 DAY),  'PM', 30, 30, 1),
+(2, DATE_ADD(CURDATE(), INTERVAL 5 DAY),  'AM', 30, 30, 1),
+(2, DATE_ADD(CURDATE(), INTERVAL 5 DAY),  'PM', 30, 30, 1),
+(2, DATE_ADD(CURDATE(), INTERVAL 6 DAY),  'AM', 30, 30, 1),
+(2, DATE_ADD(CURDATE(), INTERVAL 6 DAY),  'PM', 30, 30, 1);
 
 -- ============================================
 -- 药品种子数据
 -- ============================================
 INSERT INTO `drug` (`name`, `specification`, `unit`, `unit_price`, `category`) VALUES
-('阿莫西林胶囊',    '0.5g×24粒',  '盒', 18.50, '抗生素'),
-('布洛芬缓释胶囊',   '0.3g×20粒',  '盒', 15.00, '解热镇痛'),
-('蒙脱石散',         '3g×10袋',    '盒', 22.00, '消化系统'),
-('复方氨酚烷胺片',   '12片',       '盒', 8.50,  '感冒用药'),
-('氯雷他定片',       '10mg×6片',   '盒', 12.00, '抗过敏'),
-('维生素C片',        '100mg×100片', '瓶', 9.90,  '维生素类');
+('阿莫西林胶囊',     '0.5g×24粒',    '盒', 18.50, '抗生素'),
+('头孢克洛胶囊',     '0.25g×12粒',   '盒', 35.00, '抗生素'),
+('布洛芬缓释胶囊',   '0.3g×20粒',    '盒', 15.00, '解热镇痛'),
+('对乙酰氨基酚片',   '0.5g×10片',    '盒', 5.80,  '解热镇痛'),
+('蒙脱石散',         '3g×10袋',      '盒', 22.00, '消化系统'),
+('奥美拉唑肠溶胶囊', '20mg×14粒',    '盒', 28.50, '消化系统'),
+('复方氨酚烷胺片',   '12片',         '盒', 8.50,  '感冒用药'),
+('连花清瘟胶囊',     '0.35g×36粒',   '盒', 14.80, '感冒用药'),
+('氯雷他定片',       '10mg×6片',     '盒', 12.00, '抗过敏'),
+('维生素C片',        '100mg×100片',  '瓶', 9.90,  '维生素类'),
+('硝苯地平控释片',   '30mg×7片',     '盒', 32.00, '心血管'),
+('盐酸二甲双胍片',   '0.5g×20片',    '盒', 16.00, '降糖药');
 
 INSERT INTO `drug_stock` (`drug_id`, `current_stock`, `warning_threshold`) VALUES
-(1, 200, 20),
-(2, 150, 15),
-(3, 80,  10),
-(4, 300, 25),
-(5, 100, 10),
-(6, 500, 30);
+(1,  200, 20),
+(2,  120, 15),
+(3,  150, 15),
+(4,  80,  10),
+(5,  80,  10),
+(6,  100, 15),
+(7,  300, 25),
+(8,  250, 20),
+(9,  100, 10),
+(10, 500, 30),
+(11, 60,  10),
+(12, 90,  15);
+
+-- ============================================
+-- 演示用挂号数据（今日，已挂号待诊）
+-- 让仪表盘"今日挂号""待就诊"显示真实数据
+-- ============================================
+INSERT INTO `registration` (`patient_id`, `schedule_id`, `queue_num`, `status`, `registration_date`) VALUES
+(1, 1, 1, 1, CURDATE()),
+(2, 1, 2, 1, CURDATE()),
+(3, 1, 3, 1, CURDATE()),
+(4, 2, 1, 1, CURDATE()),
+(5, 2, 2, 1, CURDATE());
+
+-- 同步扣减排班剩余号源
+UPDATE `schedule` SET `remain_num` = `remain_num` - 3 WHERE `id` = 1;
+UPDATE `schedule` SET `remain_num` = `remain_num` - 2 WHERE `id` = 2;
+
+-- ============================================
+-- 演示用就诊记录（模拟完整就诊流程）
+-- ============================================
+INSERT INTO `consultation` (`registration_id`, `doctor_id`, `complaint`, `diagnosis`, `advice`, `status`, `start_time`, `end_time`) VALUES
+(1, 1, '反复头晕1月余，呈阵发性，伴胸闷', '高血压病1级', '低盐低脂饮食，硝苯地平控释片30mg qd，建议心电图检查，2周后复诊', 2, NOW(), NOW()),
+(2, 1, '发热咳嗽3天，体温最高38.5度', '上呼吸道感染', '多饮水，注意休息，3天后复诊', 2, NOW(), NOW()),
+(3, 1, '腹痛腹泻2天，每日3-4次水样便', '急性胃肠炎', '清淡饮食，口服补液盐，如症状加重及时就诊', 2, NOW(), NOW());
+
+-- 同步更新挂号状态为"已就诊"
+UPDATE `registration` SET `status` = 2 WHERE `id` IN (1, 2, 3);
+
+-- ============================================
+-- 演示用电子病历（AES-CBC 加密）
+-- 密钥: clinic-aes-key-32bytes-secret!! (前16字节)
+-- IV:   ClinicSystem-IV-
+-- ============================================
+INSERT INTO `medical_record` (`patient_id`, `consultation_id`, `content`, `diagnosis`, `treatment_plan`, `doctor_id`) VALUES
+(1, 1, 'ADEOowBN7LHsWPl+ANYWrUsdlhmd8i8188rAZTxCTc5UDbUvNC9ftYvkzxHI1nBGqefrmPlUsiBJq+RjaE9bB7uVoVEAqg4lEMfEeH5ihKRXO6PjYZDiyZqKNRd3pMCtoUozHzzLrSM7uF+dm1kz4DIjMKYD3RTU/3zEHymBfmLdiQPr7e3nTIGyhGZK88YWDQeGazyPJDgv6MiF9z+kjtUElrxhGLCueolLg7ADSB+o6CBL2umavVyAJTehDrsGqDnHal8TxIm9NH167iiG9sKS+nyUCgc3ENkNiBH4OWCARJSV03nNcjwCxVepsZjBEwvjdzDHYxS4L/4czBNTb11fH0hCGw4WSRU1QsoywriaG5hh9XupKxT2VDHrBfC6', '高血压病1级', '1.低盐低脂饮食 2.硝苯地平控释片30mg qd 3.建议心电图检查 4.2周后复诊', 1),
+(2, 2, 'hfufi08GL2UVqYB0IPk5cz2s1DsXTyCsf6uWNXUvrO79Zp6/ZsiHB34uJ0KcktyRJzlx9kUIUZ3v3O8g75V4pM3zIRGqjj5M9AEIkypPh8rbpXvyqxkUCEPKleBLrxAspWuOPFoTpV1aU/GKkmMvkSvKm8FMZ29MGvqGWIon/DpU/JpZX7DYh0jrlClYefqCbdhzUOZZXzhQmrVrMHpDU9WUo8mhiwnAk4gBraU6eIAuSIAbo7UVDKn1OwCwu5L8YxeVmTEx+TaXuuU/tiOEN7hiTTpk4glrY7L77z03AvbiRUnPPLG1qXkRijy/zuRNOKxsVQkuAlaV1AS8XpSI+Q==', '上呼吸道感染', '1.多饮水 2.复方氨酚烷胺片1片tid 3.布洛芬缓释胶囊0.3g prn 4.3天后复诊', 1),
+(3, 3, '3Cfj8zi3cgNoqk5mXOgdLs7Waftjli0MMXEwvorvCMkNJxO/cT+51BMSLftVodvLlsnf1VvlqNK1SwbUEhxH48GaHSP0D5c6i2HKV6bxD16Dj5e2m8kLj2XdN5TCHkl8Js6rbaXuIUNaCfyIOWQY9snPeeB02NnggbPsyH0LuXadTthOgaLII6BVokOzm8BfuRaQqjvMYpV2sCL9KlL2m6j/Uzrb8y5loOH17dKCpfSmtAQbUEfgbZIPLFtx++Pyywm047Pfzq61jmR26y73ZOVncVf7XwRe3ftfzorntRDPYeX+3GXuQzlme91ZqIfymsra4YVH34Vt1+H3NtZDnK24qyn1CXU8Yaw90d+EnQssK5Rpp/uM0XvIUtwTCfaG', '急性胃肠炎', '1.清淡饮食 2.蒙脱石散3g tid 3.口服补液盐 4.如症状加重及时就诊', 1);
+
+-- ============================================
+-- 演示用处方案
+-- ============================================
+INSERT INTO `prescription` (`consultation_id`, `diagnosis`, `prescription_content`, `status`, `doctor_id`) VALUES
+(1, '高血压病1级', '硝苯地平控释片30mg每天1次', 1, 1),
+(2, '上呼吸道感染', '复方氨酚烷胺片1片tid + 布洛芬缓释胶囊0.3g prn', 0, 1),
+(3, '急性胃肠炎', '蒙脱石散3g tid', 1, 1);
+
+INSERT INTO `prescription_drug` (`prescription_id`, `drug_id`, `quantity`, `usage_method`, `dosage`, `frequency`) VALUES
+(1, 11, 1, '口服', '30mg', '每日1次'),
+(2, 7, 1, '口服', '1片', '每日3次'),
+(2, 3, 1, '口服', '0.3g', '必要时'),
+(3, 5, 2, '口服', '3g', '每日3次');
+
+-- ============================================
+-- 演示用账单数据
+-- ============================================
+INSERT INTO `bill` (`registration_id`, `prescription_id`, `registration_fee`, `drug_fee`, `total_amount`, `payment_method`, `status`) VALUES
+(1, 1, 15.00, 32.00, 47.00, 'WECHAT', 1),
+(2, 2, 15.00, 23.50, 38.50, NULL, 0),
+(3, 3, 15.00, 44.00, 59.00, 'CASH', 1);
+
+-- ============================================
+-- 演示用复诊提醒
+-- ============================================
+INSERT INTO `reminder` (`patient_id`, `consultation_id`, `doctor_id`, `remind_date`, `content`, `status`) VALUES
+(1, 1, 1, DATE_ADD(CURDATE(), INTERVAL 14 DAY), '高血压复诊：复查血压，评估硝苯地平控释片疗效', 0),
+(2, 2, 1, DATE_ADD(CURDATE(), INTERVAL 3 DAY), '上呼吸道感染复诊：复查体温及咽部情况', 0);

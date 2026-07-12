@@ -38,7 +38,7 @@
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="createTime" label="时间" width="160" />
+      <el-table-column prop="createTime" label="时间" width="160" :formatter="formatTime" />
     </el-table>
 
     <!-- 分页 -->
@@ -168,6 +168,15 @@ async function fetchData() {
 async function loadDrugs() {
   const res = await drugApi.list({ page: 1, pageSize: 200 })
   drugList.value = res.data.records
+}
+
+function formatTime(row, column, value) {
+  if (!value) return '-'
+  if (Array.isArray(value)) {
+    const [y, m, d, h = 0, min = 0] = value
+    return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')} ${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`
+  }
+  return value
 }
 
 /**

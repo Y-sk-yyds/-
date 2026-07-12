@@ -39,9 +39,27 @@
 - MySQL 客户端: C:\Program Files\MySQL\MySQL Server 8.4\bin\mysql.exe
 
 ## 权限设计
+- 三层防护: 前端菜单 v-if → 前端路由 meta.roles → 后端 requireRole()
+- 统一模式: private void requireRole(String... roles) → SecurityUtils.getCurrentRole()
+- 权限异常: ForbiddenException → HTTP 403（"权限不足，当前角色：XXX"）
 - 医生: SecurityUtils.getCurrentUserId() → DoctorMapper → doctorId，统一在 Controller 层过滤
 - ADMIN/收银员: 无 Doctor 实体，查询不过滤，看全部数据
 - 前端: userStore 存 doctorId（登录返回），用于前端过滤
+
+### 权限矩阵
+| 模块 | 读(list) | 写(CUD) |
+|------|:---:|:---:|
+| 工作台 | 所有人 | — |
+| 患者管理 | 所有人 | ADM+DOC (create全角色) |
+| 医生管理 | 所有人 | 仅 ADM |
+| 排班管理 | 所有人 | 仅 ADM |
+| 挂号管理 | 所有人 | 所有人 |
+| 就诊管理 | ADM+DOC | ADM+DOC |
+| 处方管理 | 所有人 | ADM+DOC (create) |
+| 药品管理 | ADM+DOC | 仅 ADM |
+| 收费管理 | ADM+CASHIER | ADM+CASHIER |
+| 病历管理 | ADM+DOC | ADM+DOC |
+| 用户管理 | 仅 ADM | 仅 ADM |
 
 ## 关键工作流
 1. 挂号 → 排班号源(Redis Lua原子扣减) → 排队号(同排班计数)

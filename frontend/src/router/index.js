@@ -66,12 +66,15 @@ const routes = [
         component: () => import('@/views/patient/PatientList.vue'),
         meta: { title: '患者管理' }
       },
-      // ---- 医生管理 ----
+      // ---- 医生管理（管理员专用） ----
       {
         path: 'doctor',
         name: 'Doctor',
         component: () => import('@/views/doctor/DoctorList.vue'),
-        meta: { title: '医生管理' }
+        meta: {
+          title: '医生管理',
+          roles: ['ADMIN']
+        }
       },
       // ---- 排班管理（管理员专用） ----
       {
@@ -90,12 +93,15 @@ const routes = [
         component: () => import('@/views/registration/RegistrationList.vue'),
         meta: { title: '挂号管理' }
       },
-      // ---- 就诊管理 ----
+      // ---- 就诊管理（医生和管理员专用） ----
       {
         path: 'consultation',
         name: 'Consultation',
         component: () => import('@/views/consultation/ConsultationList.vue'),
-        meta: { title: '就诊管理' }
+        meta: {
+          title: '就诊管理',
+          roles: ['ADMIN', 'DOCTOR']
+        }
       },
       // ---- 处方管理 ----
       {
@@ -104,26 +110,35 @@ const routes = [
         component: () => import('@/views/prescription/PrescriptionList.vue'),
         meta: { title: '处方管理' }
       },
-      // ---- 药品管理 ----
+      // ---- 药品管理（医生和管理员专用） ----
       {
         path: 'drug',
         name: 'Drug',
         component: () => import('@/views/drug/DrugList.vue'),
-        meta: { title: '药品管理' }
+        meta: {
+          title: '药品管理',
+          roles: ['ADMIN', 'DOCTOR']
+        }
       },
-      // ---- 收费管理 ----
+      // ---- 收费管理（医生和管理员专用） ----
       {
         path: 'bill',
         name: 'Bill',
         component: () => import('@/views/bill/BillList.vue'),
-        meta: { title: '收费管理' }
+        meta: {
+          title: '收费管理',
+          roles: ['ADMIN', 'CASHIER']
+        }
       },
-      // ---- 病历管理 ----
+      // ---- 病历管理（医生和管理员专用） ----
       {
         path: 'record',
         name: 'Record',
         component: () => import('@/views/record/RecordList.vue'),
-        meta: { title: '病历管理' }
+        meta: {
+          title: '病历管理',
+          roles: ['ADMIN', 'DOCTOR']
+        }
       },
       // ---- 用户管理（管理员专用） ----
       {

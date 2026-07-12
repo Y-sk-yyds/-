@@ -1,9 +1,11 @@
 package com.clinic.controller;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.clinic.common.ForbiddenException;
 import com.clinic.common.Result;
 import com.clinic.dto.DoctorCreateRequest;
 import com.clinic.entity.Doctor;
+import com.clinic.security.SecurityUtils;
 import com.clinic.service.DoctorService;
 import com.clinic.vo.DoctorVO;
 import lombok.RequiredArgsConstructor;
@@ -36,6 +38,12 @@ public class DoctorController {
      * 医生服务 —— 由 Spring 通过 {@code @RequiredArgsConstructor} 自动注入。
      */
     private final DoctorService doctorService;
+
+    private void requireRole(String... roles) {
+        String currentRole = SecurityUtils.getCurrentRole();
+        for (String role : roles) if (role.equals(currentRole)) return;
+        throw new ForbiddenException("权限不足，当前角色：" + currentRole);
+    }
 
     /**
      * 分页查询医生列表。
@@ -108,6 +116,7 @@ public class DoctorController {
      */
     @PostMapping
     public Result<Void> create(@RequestBody DoctorCreateRequest request) {
+        requireRole("ADMIN");
         // 委托 DoctorService 在事务中同时创建医生记录和用户账号
         doctorService.createDoctor(request);
         return Result.ok();
@@ -138,6 +147,7 @@ public class DoctorController {
      */
     @PutMapping
     public Result<Void> update(@RequestBody Doctor doctor) {
+        requireRole("ADMIN");
         // 委托 DoctorService 执行更新，可能包含用户信息同步等额外逻辑
         doctorService.updateDoctor(doctor);
         return Result.ok();
@@ -167,6 +177,7 @@ public class DoctorController {
      */
     @DeleteMapping("/{id}")
     public Result<Void> delete(@PathVariable Long id) {
+        requireRole("ADMIN");
         // 委托 DoctorService 同时删除医生记录和关联用户账号
         doctorService.deleteDoctor(id);
         return Result.ok();

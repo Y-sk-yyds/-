@@ -1,9 +1,11 @@
 package com.clinic.controller;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.clinic.common.ForbiddenException;
 import com.clinic.common.Result;
 import com.clinic.entity.Drug;
 import com.clinic.entity.DrugStock;
+import com.clinic.security.SecurityUtils;
 import com.clinic.service.DrugService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
@@ -45,7 +47,13 @@ public class DrugController {
      */
     private final DrugService drugService;
 
-    /**
+    private void requireRole(String... roles) {
+        String currentRole = SecurityUtils.getCurrentRole();
+        for (String role : roles) if (role.equals(currentRole)) return;
+        throw new ForbiddenException("权限不足，当前角色：" + currentRole);
+    }
+
+    /*
      * 分页查询药品列表。
      *
      * <h4>请求方式</h4>
@@ -73,6 +81,7 @@ public class DrugController {
                                      @RequestParam(defaultValue = "10") Integer pageSize,
                                      @RequestParam(required = false) String name) {
         // 委托 DrugService 执行带条件的分页查询
+        requireRole("ADMIN", "DOCTOR");
         return Result.ok(drugService.pageQuery(page, pageSize, name));
     }
 
@@ -107,6 +116,7 @@ public class DrugController {
      */
     @PostMapping
     public Result<Void> create(@RequestBody Map<String, Object> body) {
+        requireRole("ADMIN");
         // 从请求体构建药品实体对象
         Drug drug = new Drug();
         drug.setName((String) body.get("name"));
@@ -161,6 +171,7 @@ public class DrugController {
      */
     @PutMapping
     public Result<Void> update(@RequestBody Map<String, Object> body) {
+        requireRole("ADMIN");
         // 从请求体构建药品实体对象
         Drug drug = new Drug();
         drug.setId(Long.valueOf(body.get("id").toString()));
@@ -205,6 +216,7 @@ public class DrugController {
      */
     @DeleteMapping("/{id}")
     public Result<Void> delete(@PathVariable Long id) {
+        requireRole("ADMIN");
         // 调用 MyBatis-Plus 的 removeById 按主键删除
         drugService.removeById(id);
         return Result.ok();

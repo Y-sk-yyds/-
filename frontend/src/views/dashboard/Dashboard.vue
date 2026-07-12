@@ -34,7 +34,7 @@
           <div class="stat-value">{{ item.value }}</div>
           <div class="stat-label">{{ item.title }}</div>
         </div>
-        <div class="stat-trend" :class="item.trend > 0 ? 'up' : 'down'">
+        <div class="stat-trend" v-if="item.trend !== null" :class="item.trend > 0 ? 'up' : item.trend < 0 ? 'down' : 'flat'">
           {{ item.trend > 0 ? '+' : '' }}{{ item.trend }}%
         </div>
       </div>
@@ -175,17 +175,18 @@ function localDate() {
  */
 const stats = computed(() => {
   const d = dashboardData.value
-  if (!d) return [
-    { key: 'todayReg', title: '今日挂号', value: 0, icon: 'Tickets', color: '#2775B6', trend: 0 },
-    { key: 'waiting', title: '待就诊', value: 0, icon: 'Clock', color: '#F39C12', trend: 0 },
-    { key: 'completed', title: '已完成', value: 0, icon: 'CircleCheck', color: '#27AE60', trend: 0 },
-    { key: 'unpaid', title: '待收费', value: 0, icon: 'Money', color: '#E74C3C', trend: 0 }
+  const defaults = [
+    { key: 'todayReg', title: '今日挂号', value: 0, icon: 'Tickets', color: '#2775B6', trend: null },
+    { key: 'waiting', title: '待就诊', value: 0, icon: 'Clock', color: '#F39C12', trend: null },
+    { key: 'completed', title: '已完成', value: 0, icon: 'CircleCheck', color: '#27AE60', trend: null },
+    { key: 'unpaid', title: '待收费', value: 0, icon: 'Money', color: '#E74C3C', trend: null }
   ]
+  if (!d) return defaults
   return [
-    { key: 'todayReg', title: '今日挂号', value: d.todayRegistrations ?? 0, icon: 'Tickets', color: '#2775B6', trend: 0 },
-    { key: 'waiting', title: '待就诊', value: d.waitingConsultations ?? 0, icon: 'Clock', color: '#F39C12', trend: 0 },
-    { key: 'completed', title: '已完成', value: d.completedToday ?? 0, icon: 'CircleCheck', color: '#27AE60', trend: 0 },
-    { key: 'unpaid', title: '待收费', value: d.unpaidBills ?? 0, icon: 'Money', color: '#E74C3C', trend: 0 }
+    { key: 'todayReg', title: '今日挂号', value: d.todayRegistrations ?? 0, icon: 'Tickets', color: '#2775B6', trend: d.todayRegTrend ?? null },
+    { key: 'waiting', title: '待就诊', value: d.waitingConsultations ?? 0, icon: 'Clock', color: '#F39C12', trend: d.waitingTrend ?? null },
+    { key: 'completed', title: '已完成', value: d.completedToday ?? 0, icon: 'CircleCheck', color: '#27AE60', trend: d.completedTrend ?? null },
+    { key: 'unpaid', title: '待收费', value: d.unpaidBills ?? 0, icon: 'Money', color: '#E74C3C', trend: d.unpaidTrend ?? null }
   ]
 })
 
@@ -342,6 +343,7 @@ onMounted(async () => {
 .stat-trend { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 6px; }
 .stat-trend.up { color: #27AE60; background: rgba(39,174,96,0.1); }
 .stat-trend.down { color: #E74C3C; background: rgba(231,76,60,0.1); }
+.stat-trend.flat { color: #909399; background: rgba(144,147,153,0.1); }
 
 /* ---- 图表区域 ---- */
 .chart-row { margin-bottom: 20px; }

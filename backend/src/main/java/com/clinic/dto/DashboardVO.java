@@ -27,6 +27,15 @@ public class DashboardVO {
     /** 待收费账单数 */
     private Long unpaidBills;
 
+    /** 今日挂号趋势（今日 vs 昨日变化百分比，null 表示无对比数据） */
+    private Integer todayRegTrend;
+    /** 待就诊趋势 */
+    private Integer waitingTrend;
+    /** 已完成趋势 */
+    private Integer completedTrend;
+    /** 待收费趋势 */
+    private Integer unpaidTrend;
+
     /** 近7日门诊趋势 */
     private List<TrendItem> weeklyTrend;
     /** 科室就诊分布 */

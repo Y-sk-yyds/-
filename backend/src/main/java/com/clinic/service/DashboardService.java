@@ -39,11 +39,16 @@ public class DashboardService {
      */
     public DashboardVO build() {
         LocalDate today = LocalDate.now();
+        LocalDate yesterday = today.minusDays(1);
         return DashboardVO.builder()
                 .todayRegistrations(countTodayRegistrations(today))
                 .waitingConsultations(countWaiting())
                 .completedToday(countCompletedToday(today))
                 .unpaidBills(countUnpaidBills())
+                .todayRegTrend(calcTrend(countTodayRegistrations(today), countTodayRegistrations(yesterday)))
+                .waitingTrend(calcTrend(countWaiting(), countWaitingOnDate(yesterday)))
+                .completedTrend(calcTrend(countCompletedToday(today), countCompletedToday(yesterday)))
+                .unpaidTrend(calcTrend(countUnpaidBills(), countUnpaidBillsOnDate(yesterday)))
                 .weeklyTrend(buildWeeklyTrend(today))
                 .departmentDistribution(buildDeptDistribution())
                 .todos(buildTodos())
@@ -87,6 +92,35 @@ public class DashboardService {
     private Long countUnpaidBills() {
         return billMapper.selectCount(new LambdaQueryWrapper<Bill>()
                 .eq(Bill::getStatus, 0));
+    }
+
+    /**
+     * 计算趋势百分比（今日 vs 昨日）
+     * @return null 表示无对比数据（两天均为0），否则为变化百分比
+     */
+    private Integer calcTrend(long today, long yesterday) {
+        if (today == 0 && yesterday == 0) return null;
+        if (yesterday == 0) return 100;
+        return (int) Math.round((today - yesterday) * 100.0 / yesterday);
+    }
+
+    /**
+     * 指定日期的待就诊数 —— registration.status = 1 且 registration_date = date
+     */
+    private Long countWaitingOnDate(LocalDate date) {
+        return registrationMapper.selectCount(new LambdaQueryWrapper<Registration>()
+                .eq(Registration::getStatus, 1)
+                .eq(Registration::getRegistrationDate, date));
+    }
+
+    /**
+     * 指定日期的待收费账单数 —— bill.status = 0 且 create_time 在当天
+     */
+    private Long countUnpaidBillsOnDate(LocalDate date) {
+        return billMapper.selectCount(new LambdaQueryWrapper<Bill>()
+                .eq(Bill::getStatus, 0)
+                .ge(Bill::getCreateTime, date.atStartOfDay())
+                .lt(Bill::getCreateTime, date.plusDays(1).atStartOfDay()));
     }
 
     // ================================================================

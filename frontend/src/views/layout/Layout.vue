@@ -65,8 +65,8 @@
             </div>
           </template>
         </el-menu-item>
-        <!-- 医生管理 -->
-        <el-menu-item index="/doctor">
+        <!-- 医生管理：仅管理员可见 -->
+        <el-menu-item index="/doctor" v-if="userStore.user?.role === 'ADMIN'">
           <template #title>
             <div class="menu-item">
               <el-icon :size="18"><Avatar /></el-icon>
@@ -92,8 +92,8 @@
             </div>
           </template>
         </el-menu-item>
-        <!-- 就诊管理 -->
-        <el-menu-item index="/consultation">
+        <!-- 就诊管理：仅管理员和医生可见 -->
+        <el-menu-item index="/consultation" v-if="userStore.user?.role === 'ADMIN' || userStore.user?.role === 'DOCTOR'">
           <template #title>
             <div class="menu-item">
               <el-icon :size="18"><Document /></el-icon>
@@ -110,8 +110,8 @@
             </div>
           </template>
         </el-menu-item>
-        <!-- 药品管理 -->
-        <el-menu-item index="/drug">
+        <!-- 药品管理：仅管理员和医生可见 -->
+        <el-menu-item index="/drug" v-if="userStore.user?.role === 'ADMIN' || userStore.user?.role === 'DOCTOR'">
           <template #title>
             <div class="menu-item">
               <el-icon :size="18"><Box /></el-icon>
@@ -119,8 +119,8 @@
             </div>
           </template>
         </el-menu-item>
-        <!-- 收费管理 -->
-        <el-menu-item index="/bill">
+        <!-- 收费管理：仅管理员和收银员可见 -->
+        <el-menu-item index="/bill" v-if="userStore.user?.role === 'ADMIN' || userStore.user?.role === 'CASHIER'">
           <template #title>
             <div class="menu-item">
               <el-icon :size="18"><Coin /></el-icon>
@@ -128,8 +128,8 @@
             </div>
           </template>
         </el-menu-item>
-        <!-- 病历管理 -->
-        <el-menu-item index="/record">
+        <!-- 病历管理：仅 ADMIN 和 DOCTOR 可见 -->
+        <el-menu-item index="/record" v-if="userStore.user?.role === 'ADMIN' || userStore.user?.role === 'DOCTOR'">
           <template #title>
             <div class="menu-item">
               <el-icon :size="18"><Files /></el-icon>
