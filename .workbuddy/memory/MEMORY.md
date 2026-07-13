@@ -71,3 +71,20 @@
 - 每次改后端代码需重启(IDE热更新不覆盖SQL/XML等)
 - PrescriptionService ↔ BillService 存在循环依赖风险，涉及账单的操作放 Controller 层
 - AES 加密: key=前16字节, IV="ClinicSystem-IV-", CBC模式
+
+## 项目状态（截至 2026-07-13）
+### 已完成
+- 全部 10 个业务模块开发
+- RBAC 三层权限（前端菜单 + 路由 + 后端 Controller）
+- ForbiddenException (HTTP 403)
+- Redis Lua 防超卖 + SETNX 分布式锁 + RabbitMQ 异步
+- AES-256 病历加密
+- 13 张数据库表 + 完整种子数据
+- 19 个测试用例（15 单元 + 4 集成）100% 通过
+- 技术文档 docs/技术文档.md
+- 测试报告 docs/测试报告.md
+- 答辩 PPT docs/答辩PPT.pptx (12 页)
+- 系统截图（已插入 PPT）
+
+### 待处理
+- 🟡 GitHub 切换默认分支 main → master，删除 main
