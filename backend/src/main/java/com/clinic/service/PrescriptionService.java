@@ -151,11 +151,15 @@ public class PrescriptionService extends ServiceImpl<PrescriptionMapper, Prescri
             }
 
             // 执行 MySQL 层面的条件更新，ge("current_stock", quantity) 防止超扣
-            drugStockService.update()
+            boolean updated = drugStockService.update()
                     .setSql("current_stock = current_stock - " + quantity)
                     .eq("drug_id", drugId)
                     .ge("current_stock", quantity)
                     .update();
+            if (!updated) {
+                Drug drug = drugService.getById(drugId);
+                throw new IllegalArgumentException("药品 [" + (drug != null ? drug.getName() : drugId) + "] 库存不足");
+            }
 
         } finally {
             stringRedisTemplate.delete(lockKey);

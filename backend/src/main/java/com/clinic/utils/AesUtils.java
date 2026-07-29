@@ -64,18 +64,18 @@ public class AesUtils {
     /**
      * 根据配置的密钥字符串生成 AES 密钥规范对象
      *
-     * <p>将配置文件中的密钥字符串截取/填充为恰好 16 字节，
+     * <p>将配置文件中的密钥字符串截取/填充为恰好 32 字节，
      * 并封装为 {@link SecretKeySpec} 对象，供加解密使用。</p>
      *
-     * @return 128 位（16 字节）的 AES 密钥规范
+     * @return 256 位（32 字节）的 AES 密钥规范
      */
     private SecretKeySpec getKey() {
-        // 创建固定 16 字节的缓冲区
-        byte[] keyBytes = new byte[16];
+        // 创建固定 32 字节的缓冲区
+        byte[] keyBytes = new byte[32];
         // 将配置的密钥字符串转换为字节数组
         byte[] srcBytes = secretKey.getBytes(StandardCharsets.UTF_8);
-        // 复制源字节到目标缓冲区（最多 16 字节，不足部分补 0）
-        System.arraycopy(srcBytes, 0, keyBytes, 0, Math.min(srcBytes.length, 16));
+        // 复制源字节到目标缓冲区（最多 32 字节，不足部分补 0）
+        System.arraycopy(srcBytes, 0, keyBytes, 0, Math.min(srcBytes.length, 32));
         // 构建 AES 密钥规范对象
         return new SecretKeySpec(keyBytes, "AES");
     }

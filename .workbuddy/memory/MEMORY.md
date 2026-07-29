@@ -5,6 +5,7 @@
 - 技术栈: Spring Boot 3.2 + Vue3 + Element Plus + MyBatis-Plus + MySQL + Redis + RabbitMQ
 - 端口: 后端 8080, 前端 5173
 - 工作目录: D:\newproject\wk6real
+- 作者: 袁水康（学号 2023102114；桌面模板原属张怡，系借用同学模板）
 
 ## 技术选型
 - 后端: Java 17, Spring Boot 3.2, Spring Security + JWT, MyBatis-Plus 3.5.5
@@ -70,21 +71,39 @@
 ## 注意
 - 每次改后端代码需重启(IDE热更新不覆盖SQL/XML等)
 - PrescriptionService ↔ BillService 存在循环依赖风险，涉及账单的操作放 Controller 层
-- AES 加密: key=前16字节, IV="ClinicSystem-IV-", CBC模式
+- AES 加密: key=32字节(AES-256), IV="ClinicSystem-IV-", CBC模式
+- AES 密钥变更历史: 初始 `clinic-aes-key-32bytes-secret!!`(AES-128) → 当前 `clinic-aes-secret-key-for-256bit`(AES-256)
+- init.sql 密文必须与当前 application.yml 的密钥匹配，换密钥后必须重新加密种子数据
 
-## 项目状态（截至 2026-07-13）
+## 项目状态（截至 2026-07-23）
 ### 已完成
 - 全部 10 个业务模块开发
 - RBAC 三层权限（前端菜单 + 路由 + 后端 Controller）
 - ForbiddenException (HTTP 403)
 - Redis Lua 防超卖 + SETNX 分布式锁 + RabbitMQ 异步
-- AES-256 病历加密
+- AES-256 病历加密（已从 AES-128 升级，代码/文档一致）
 - 13 张数据库表 + 完整种子数据
-- 19 个测试用例（15 单元 + 4 集成）100% 通过
+- 19 个测试用例（15 单元 + 4 集成）100% 通过 + IDEA 全绿截图
 - 技术文档 docs/技术文档.md
 - 测试报告 docs/测试报告.md
 - 答辩 PPT docs/答辩PPT.pptx (12 页)
 - 系统截图（已插入 PPT）
+- 毕业论文 docs/毕业论文.docx（约1.2万字，七章+参考文献+致谢）
+- 开题报告（用户已自定稿，docx 收尾完成）
+- JMeter 挂号压测：35并发→30成功/0超卖，平均137ms/QPS 137.8
+- JMeter 库存压测：30并发→5成功/0超卖（发现并修复 SETNX 锁超卖 bug）
+- 库存超卖 bug 修复：PrescriptionService.deductStock() 增加 UPDATE 影响行数检查
+- AES-256 升级：AesUtils.java byte[16]→[32]，application.yml 密钥 31→32 字符
+- init.sql 恢复：sql/init.sql 477行（从 live MySQL dump）
+- 论文正文：第一章（引用+可行性分析）✅ 第三章（核心用例）✅ 第六章（性能测试节+第七章修正）✅ 第二章/第四章/第五章待审查
+- 论文配图：用例图/架构图/ER图/流程图 已全部完成 ✅
+- 6.1 补 JMeter 层 + 6.3 数据对齐代码（28/7）+ 6.4/6.5 去重合并
 
 ### 待处理
-- 🟡 GitHub 切换默认分支 main → master，删除 main
+- 🟡 论文收尾：封面信息（学号2023102114/姓名袁水康/导师/日期）、参考文献格式、字号行距
+- 🟡 截图贴入（第五章页面截图 + 第六章19测试+2组JMeter截图）
+- 🟡 GitHub 切换默认分支 main → master
+- ✅ 论文七章全部审查完成（引用/数据/编号对齐）
+- ✅ 论文配图全部完成（用例/架构/ER/流程/挂号Lua）
+- ✅ JMeter 性能压测 2场景（均零超卖）
+- ✅ 19 测试截图 / AES-256 / init.sql

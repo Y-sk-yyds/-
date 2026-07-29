@@ -130,7 +130,7 @@ class MiddlewareIntegrationTest {
         assertTrue(succ == 28, "应恰好成功28个, 实际" + succ);
         assertTrue(fail == 7, "应恰好拒绝7个, 实际" + fail);
 
-        log.info("[PASS] Redis Lua: 30号源, 35并发, 成功30, 拒绝5, 0超卖");
+        log.info("[PASS] Redis Lua: 30号源, 35并发, 成功28, 拒绝7, 0超卖");
     }
 
     private HttpHeaders authHeaders() {
