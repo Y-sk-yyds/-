@@ -61,8 +61,8 @@ public class SecurityConfig {
             .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             // 3. 配置 URL 级别的授权规则
             .authorizeHttpRequests(auth -> auth
-                // 登录接口允许匿名访问
-                .requestMatchers("/api/auth/login").permitAll()
+                // 登录和退出接口允许匿名访问
+                .requestMatchers("/api/auth/login", "/api/auth/logout").permitAll()
                 // 其他所有接口需要认证后访问
                 .anyRequest().authenticated()
             )

@@ -41,8 +41,8 @@ public class CorsConfig {
         // 创建 CORS 配置对象
         CorsConfiguration config = new CorsConfiguration();
 
-        // 允许所有来源的跨域请求（使用通配符匹配模式）
-        config.addAllowedOriginPattern("*");
+        // 仅允许本机前端开发服务器跨域访问
+        config.addAllowedOriginPattern("http://localhost:5173");
         // 允许所有请求头
         config.addAllowedHeader("*");
         // 允许所有 HTTP 方法（GET、POST、PUT、DELETE、OPTIONS 等）

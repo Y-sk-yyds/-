@@ -5,6 +5,7 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -37,6 +38,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     /** JWT 令牌提供者，用于令牌解析和验证 */
     private final JwtTokenProvider jwtTokenProvider;
 
+    /** Redis 字符串操作模板，用于检查 token 黑名单 */
+    private final StringRedisTemplate stringRedisTemplate;
+
     /**
      * 过滤器核心逻辑 —— 对每个 HTTP 请求执行 JWT 认证。
      *
@@ -60,7 +64,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         // 步骤1：从请求头中解析 JWT 令牌
         String token = resolveToken(request);
 
-        // 步骤2：检查令牌是否存在且有效
+        // 步骤2：检查令牌是否在黑名单中（已退出登录）
+        if (StringUtils.hasText(token)
+                && Boolean.TRUE.equals(stringRedisTemplate.hasKey("blacklist:token:" + token))) {
+            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+            return;
+        }
+
+        // 步骤3：检查令牌是否存在且有效
         if (StringUtils.hasText(token) && jwtTokenProvider.validateToken(token)) {
             // 步骤3：从令牌中提取用户信息
             String username = jwtTokenProvider.getUsername(token);

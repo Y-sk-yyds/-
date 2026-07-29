@@ -3,10 +3,15 @@ package com.clinic.controller;
 import com.clinic.common.Result;
 import com.clinic.dto.LoginRequest;
 import com.clinic.dto.LoginResponse;
+import com.clinic.security.JwtTokenProvider;
 import com.clinic.service.AuthService;
+import io.jsonwebtoken.Claims;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.web.bind.annotation.*;
+
+import java.time.Duration;
 
 /**
  * 认证控制器 —— 处理用户登录认证相关的 HTTP 请求。
@@ -32,6 +37,12 @@ public class AuthController {
      * 认证服务 —— 由 Spring 通过 {@code @RequiredArgsConstructor} 自动注入。
      */
     private final AuthService authService;
+
+    /** JWT 令牌提供者，用于解析 token 获取过期时间 */
+    private final JwtTokenProvider jwtTokenProvider;
+
+    /** Redis 字符串操作模板，用于 token 黑名单 */
+    private final StringRedisTemplate stringRedisTemplate;
 
     /**
      * 用户登录接口。
@@ -71,5 +82,34 @@ public class AuthController {
     public Result<LoginResponse> login(@Valid @RequestBody LoginRequest request) {
         // 委托 AuthService 执行密码验证与令牌生成
         return Result.ok(authService.login(request));
+    }
+
+    /**
+     * 用户退出登录接口。
+     *
+     * <p>将当前 JWT 令牌加入 Redis 黑名单，使其在有效期内也无法继续使用。
+     * 黑名单的过期时间与 token 剩余有效时间一致，token 过期后自动清理。</p>
+     *
+     * @param authHeader Authorization 请求头，格式为 "Bearer {token}"
+     * @return 统一响应结果
+     */
+    @PostMapping("/logout")
+    public Result<?> logout(@RequestHeader("Authorization") String authHeader) {
+        // 提取纯 token（去掉 "Bearer " 前缀）
+        String token = authHeader.startsWith("Bearer ")
+                ? authHeader.substring(7)
+                : authHeader;
+
+        // 解析 token 获取过期时间
+        Claims claims = jwtTokenProvider.parseToken(token);
+        long remaining = claims.getExpiration().getTime() - System.currentTimeMillis();
+
+        // 仅当 token 尚未过期时才加入黑名单
+        if (remaining > 0) {
+            stringRedisTemplate.opsForValue()
+                    .set("blacklist:token:" + token, "1", Duration.ofMillis(remaining));
+        }
+
+        return Result.ok();
     }
 }

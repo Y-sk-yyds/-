@@ -9,8 +9,14 @@ import com.clinic.mapper.DoctorMapper;
 import com.clinic.mapper.UserMapper;
 import com.clinic.security.JwtTokenProvider;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
+
+import jakarta.servlet.http.HttpServletRequest;
+import java.time.Duration;
 
 /**
  * 认证服务类
@@ -43,6 +49,9 @@ public class AuthService {
     /** JWT 令牌生成与解析工具 */
     private final JwtTokenProvider jwtTokenProvider;
 
+    /** Redis 字符串操作模板，用于登录限流 */
+    private final StringRedisTemplate stringRedisTemplate;
+
     /**
      * 用户登录
      * <p>
@@ -62,6 +71,17 @@ public class AuthService {
      * @throws IllegalArgumentException 用户名或密码错误、账号被禁用时抛出
      */
     public LoginResponse login(LoginRequest request) {
+        // 限流检查：同 IP 每分钟最多 5 次登录，防止暴力破解
+        String clientIp = getClientIp();
+        String rateKey = "login:rate:" + clientIp;
+        Long count = stringRedisTemplate.opsForValue().increment(rateKey);
+        if (count != null && count == 1) {
+            stringRedisTemplate.expire(rateKey, Duration.ofMinutes(1));
+        }
+        if (count != null && count > 5) {
+            throw new IllegalArgumentException("操作频繁，请1分钟后再试");
+        }
+
         // 第一步：根据用户名从数据库查询用户
         User user = userMapper.selectOne(
                 new LambdaQueryWrapper<User>().eq(User::getUsername, request.getUsername())
@@ -97,5 +117,25 @@ public class AuthService {
 
         // 构建并返回登录响应
         return new LoginResponse(token, user.getUsername(), user.getRealName(), user.getRole(), doctorId);
+    }
+
+    /**
+     * 从当前请求上下文中获取客户端真实 IP 地址。
+     *
+     * @return 客户端 IP 地址字符串
+     */
+    private String getClientIp() {
+        ServletRequestAttributes attrs =
+                (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+        if (attrs == null) {
+            return "unknown";
+        }
+        HttpServletRequest request = attrs.getRequest();
+        // 优先从代理转发的 X-Forwarded-For 头获取真实 IP
+        String ip = request.getHeader("X-Forwarded-For");
+        if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
+            ip = request.getRemoteAddr();
+        }
+        return ip;
     }
 }
