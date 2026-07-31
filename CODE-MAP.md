@@ -1,6 +1,6 @@
 # CODE-MAP.md — 社区诊所门诊诊疗管理系统
 
-> 最后更新: 2026-07-11 | Phase: 全部测试完成 (19/19) + 单元测试
+> 最后更新: 2026-07-30 | Phase: Docker 部署配置完成
 
 ## 一、项目结构
 
@@ -190,7 +190,26 @@ wk6real/
 | RabbitMQ | 复诊提醒 | Direct Exchange + Queue，异步发送短信/站内提醒 |
 | AES-256 | 病历加密 | AES/CBC/PKCS5Padding，密钥配置化 |
 
-## 六、开发阶段
+## 六、Docker 部署
+
+| 文件 | 用途 |
+|------|------|
+| `.env` | 所有密码/密钥集中管理 |
+| `docker-compose.yml` | 5 服务编排：MySQL + Redis + RabbitMQ + 后端 + 前端 |
+| `backend/Dockerfile` | Maven 多阶段构建 → JRE 运行 |
+| `backend/src/main/resources/application-docker.yml` | 环境变量注入密码 |
+| `frontend/Dockerfile` | Node 构建 → Nginx 托管 |
+| `frontend/nginx.conf` | SPA fallback + /api 反向代理 |
+
+部署命令：
+```bash
+docker-compose up -d                # 首次启动（自动构建镜像）
+docker-compose down                 # 停止
+docker-compose up -d --build        # 代码更新后重新构建
+docker-compose logs -f backend      # 查看后端日志
+```
+
+## 七、开发阶段
 
 | 阶段 | 内容 | 状态 |
 |------|------|------|

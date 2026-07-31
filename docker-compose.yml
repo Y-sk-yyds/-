@@ -1,7 +1,25 @@
-# MySQL 使用本机 8.4，不纳入 Docker
-# 数据库 clinic_db 需手动创建后执行 sql/init.sql
-
 services:
+  # ===== MySQL 8.4 =====
+  mysql:
+    image: mysql:8.4
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    container_name: clinic-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./sql/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # ===== Redis 7 =====
   redis:
     image: redis:7-alpine
     container_name: clinic-redis
@@ -14,6 +32,7 @@ services:
       timeout: 3s
       retries: 5
 
+  # ===== RabbitMQ 3 =====
   rabbitmq:
     image: rabbitmq:3-management-alpine
     container_name: clinic-rabbitmq
@@ -22,10 +41,47 @@ services:
       - "5672:5672"
       - "15672:15672"
     environment:
-      RABBITMQ_DEFAULT_USER: guest
-      RABBITMQ_DEFAULT_PASS: guest
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS}
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "check_running"]
       interval: 10s
       timeout: 5s
       retries: 5
+
+  # ===== Spring Boot 后端 =====
+  backend:
+    build: ./backend
+    container_name: clinic-backend
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      RABBITMQ_USER: ${RABBITMQ_USER}
+      RABBITMQ_PASS: ${RABBITMQ_PASS}
+      JWT_SECRET: ${JWT_SECRET}
+      AES_SECRET_KEY: ${AES_SECRET_KEY}
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  # ===== Vue3 前端 =====
+  frontend:
+    build: ./frontend
+    container_name: clinic-frontend
+    restart: unless-stopped
+    user: root
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+
+volumes:
+  mysql-data:

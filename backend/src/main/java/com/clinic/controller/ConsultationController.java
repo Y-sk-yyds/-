@@ -186,7 +186,7 @@ public class ConsultationController {
 
     /** 中文数字 → 阿拉伯数字映射 */
     private static final Map<String, Integer> CN_NUM = Map.of(
-            "一", 1, "二", 2, "三", 3, "四", 4, "五", 5,
+            "一", 1, "两", 2, "三", 3, "四", 4, "五", 5,
             "六", 6, "七", 7, "八", 8, "九", 9, "十", 10);
 
     @PutMapping("/{id}/complete")
