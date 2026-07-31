@@ -1,6 +1,7 @@
 package com.clinic.controller;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.clinic.common.ForbiddenException;
 import com.clinic.common.Result;
@@ -8,11 +9,14 @@ import com.clinic.config.RabbitMQConfig;
 import com.clinic.dto.ReminderMessage;
 import com.clinic.entity.Consultation;
 import com.clinic.entity.Doctor;
+import com.clinic.entity.Prescription;
 import com.clinic.entity.Registration;
 import com.clinic.mapper.DoctorMapper;
 import com.clinic.security.SecurityUtils;
+import com.clinic.service.BillService;
 import com.clinic.service.ConsultationService;
 import com.clinic.service.RegistrationService;
+import com.clinic.service.PrescriptionService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.web.bind.annotation.*;
@@ -53,6 +57,8 @@ public class ConsultationController {
     private final ConsultationService consultationService;
     private final DoctorMapper doctorMapper;
     private final RegistrationService registrationService;
+    private final PrescriptionService prescriptionService;
+    private final BillService billService;
     private final RabbitTemplate rabbitTemplate;
 
     private void requireRole(String... roles) {
@@ -210,6 +216,15 @@ public class ConsultationController {
                         RabbitMQConfig.REMINDER_ROUTING_KEY, msg);
             }
         }
+
+        // 没有处方时自动生成纯挂号费账单
+        long prescriptionCount = prescriptionService.count(
+                new LambdaQueryWrapper<Prescription>()
+                        .eq(Prescription::getConsultationId, id));
+        if (prescriptionCount == 0 && consultation != null) {
+            billService.createBill(consultation.getRegistrationId(), null);
+        }
+
         return Result.ok();
     }
 
