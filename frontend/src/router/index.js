@@ -40,8 +40,24 @@ const routes = [
   {
     path: '/login',
     name: 'Login',
-    component: () => import('@/views/layout/Login.vue'),  // 懒加载登录组件
+    component: () => import('@/views/layout/Login.vue'),
     meta: { title: '登录' }
+  },
+
+  // ================================================================
+  // 移动端患者服务（独立路由，无需登录）
+  // ================================================================
+  {
+    path: '/mobile',
+    name: 'MobileHome',
+    component: () => import('@/views/mobile/MobileHome.vue'),
+    meta: { title: '排班挂号', mobile: true }
+  },
+  {
+    path: '/mobile/records',
+    name: 'MobileRecords',
+    component: () => import('@/views/mobile/MobileRecords.vue'),
+    meta: { title: '我的就诊', mobile: true }
   },
 
   // ================================================================
@@ -179,6 +195,11 @@ const router = createRouter({
  */
 router.beforeEach((to, from, next) => {
   const token = localStorage.getItem('token')
+  // 移动端页面无需登录
+  if (to.meta.mobile) {
+    next()
+    return
+  }
   // 未认证用户试图访问非登录页 → 重定向到登录页
   if (to.path !== '/login' && !token) {
     next('/login')

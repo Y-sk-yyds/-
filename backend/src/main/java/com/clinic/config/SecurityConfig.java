@@ -63,6 +63,8 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 // 登录和退出接口允许匿名访问
                 .requestMatchers("/api/auth/login", "/api/auth/logout").permitAll()
+                // 移动端患者服务接口（无需登录，通过手机号验证身份）
+                .requestMatchers("/api/mobile/**").permitAll()
                 // 其他所有接口需要认证后访问
                 .anyRequest().authenticated()
             )

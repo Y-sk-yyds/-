@@ -219,3 +219,14 @@ docker-compose logs -f backend      # 查看后端日志
 | P4 | 挂号+Redis并发 | ✅ 完成 |
 | P5 | 就诊+处方+药品+收费 | ✅ 完成 |
 | P6 | 病历AES+复诊提醒+仪表盘+用户管理 | ✅ 完成 |
+| P7 | 移动端患者服务（H5 手机网页，3页面，免登录） | ✅ 完成 |
+
+## 八、移动端患者服务
+
+| 文件 | 用途 |
+|------|------|
+| `backend/src/main/java/.../MobileController.java` | 3个免登录 API：排班、挂号、我的数据+支付 |
+| `frontend/src/views/mobile/MobileHome.vue` | 排班挂号页（日期选择+医生卡片+手机挂号） |
+| `frontend/src/views/mobile/MobileRecords.vue` | 我的就诊页（挂号列表+排队看板+病历+手机支付） |
+
+访问：`http://localhost/mobile`，无需登录，输入患者手机号

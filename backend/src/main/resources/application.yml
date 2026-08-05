@@ -2,6 +2,8 @@ server:
   port: 8080
 
 spring:
+  main:
+    allow-circular-references: true
   jackson:
     date-format: yyyy-MM-dd HH:mm:ss
     time-zone: Asia/Shanghai
@@ -10,7 +12,7 @@ spring:
     driver-class-name: com.mysql.cj.jdbc.Driver
     url: jdbc:mysql://localhost:3306/clinic_db?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&useSSL=false
     username: root
-    password: 123456
+    password: 199191
     hikari:
       maximum-pool-size: 50
       minimum-idle: 5
@@ -53,7 +55,7 @@ jwt:
   expiration: 86400000
 
 aes:
-  secret-key: clinic-aes-key-32bytes-secret!!
+  secret-key: clinic-aes-secret-key-for-256bit
 
 # 挂号放号时间（每天几点开始放号）
 schedule:

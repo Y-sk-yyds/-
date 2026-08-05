@@ -207,3 +207,14 @@ export const userApi = {
 export const dashboardApi = {
   get: () => request({ url: '/dashboard', method: 'get' })
 }
+
+// ================================================================
+// 移动端患者服务模块（无需登录）
+// ================================================================
+
+export const mobileApi = {
+  schedules: (workDate) => request({ url: '/mobile/schedules', method: 'get', params: { workDate } }),
+  register: (data) => request({ url: '/mobile/registrations', method: 'post', data }),
+  myData: (phone) => request({ url: '/mobile/my-data', method: 'get', params: { phone } }),
+  createPatient: (data) => request({ url: '/mobile/patients', method: 'post', data })
+}

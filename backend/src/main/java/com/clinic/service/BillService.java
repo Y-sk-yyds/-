@@ -89,25 +89,23 @@ public class BillService extends ServiceImpl<BillMapper, Bill> {
      */
     @Transactional
     public Bill createBill(Long registrationId, Long prescriptionId) {
-        // 查询挂号记录
-        Registration reg = registrationService.getById(registrationId);
+        // 挂号时已生成账单，开处方时更新已有账单加药费
+        Bill bill = getOne(new LambdaQueryWrapper<Bill>().eq(Bill::getRegistrationId, registrationId));
+        boolean exists = bill != null;
+        if (!exists) {
+            bill = new Bill();
+            bill.setRegistrationId(registrationId);
+            bill.setRegistrationFee(new BigDecimal("10.00"));
+            bill.setStatus(0);
+        }
 
-        // ===== 创建账单对象 =====
-        Bill bill = new Bill();
-        bill.setRegistrationId(registrationId);
         bill.setPrescriptionId(prescriptionId);
-
-        // 挂号费固定 10 元
-        bill.setRegistrationFee(new BigDecimal("10.00"));
 
         // ===== 计算药费 =====
         BigDecimal drugFee = BigDecimal.ZERO;
         if (prescriptionId != null) {
-            // 查询处方关联的所有药品明细
             List<PrescriptionDrug> items = prescriptionDrugMapper.selectList(
                     new LambdaQueryWrapper<PrescriptionDrug>().eq(PrescriptionDrug::getPrescriptionId, prescriptionId));
-
-            // 累加每种药品的费用：单价 × 数量
             for (PrescriptionDrug item : items) {
                 Drug drug = drugService.getById(item.getDrugId());
                 drugFee = drugFee.add(drug.getUnitPrice().multiply(BigDecimal.valueOf(item.getQuantity())));
@@ -119,9 +117,8 @@ public class BillService extends ServiceImpl<BillMapper, Bill> {
         // 总金额 = 挂号费 + 药品费
         bill.setTotalAmount(bill.getRegistrationFee().add(drugFee));
 
-        // 状态：0 = 待支付
-        bill.setStatus(0);
-        save(bill);
+        // 已存在则更新，不存在则插入
+        saveOrUpdate(bill);
 
         return bill;
     }

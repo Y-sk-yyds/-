@@ -7,6 +7,7 @@ import com.clinic.entity.Doctor;
 import com.clinic.entity.Registration;
 import com.clinic.mapper.DoctorMapper;
 import com.clinic.security.SecurityUtils;
+import com.clinic.service.BillService;
 import com.clinic.service.RegistrationService;
 import com.clinic.vo.RegistrationVO;
 import lombok.RequiredArgsConstructor;
@@ -53,6 +54,8 @@ public class RegistrationController {
      * 医生数据访问层 —— 用于根据当前登录用户查询对应的医生记录。
      */
     private final DoctorMapper doctorMapper;
+
+    private final BillService billService;
 
     /**
      * 分页查询挂号列表。
@@ -141,7 +144,9 @@ public class RegistrationController {
         Long patientId = body.get("patientId");
         Long scheduleId = body.get("scheduleId");
         // 委托 RegistrationService 执行挂号逻辑（含号源校验和扣减）
-        return Result.ok(registrationService.createRegistration(patientId, scheduleId));
+        Registration reg = registrationService.createRegistration(patientId, scheduleId);
+        billService.createBill(reg.getId(), null);
+        return Result.ok(reg);
     }
 
     /**

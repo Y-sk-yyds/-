@@ -217,14 +217,6 @@ public class ConsultationController {
             }
         }
 
-        // 没有处方时自动生成纯挂号费账单
-        long prescriptionCount = prescriptionService.count(
-                new LambdaQueryWrapper<Prescription>()
-                        .eq(Prescription::getConsultationId, id));
-        if (prescriptionCount == 0 && consultation != null) {
-            billService.createBill(consultation.getRegistrationId(), null);
-        }
-
         return Result.ok();
     }
 
