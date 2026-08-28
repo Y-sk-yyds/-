@@ -1,0 +1,24 @@
+# Docker 环境配置 —— 密码/密钥全部通过环境变量注入，不硬编码
+spring:
+  main:
+    allow-circular-references: true
+  datasource:
+    url: jdbc:mysql://mysql:3306/clinic_db?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+    username: ${MYSQL_USER:root}
+    password: ${MYSQL_PASSWORD}
+
+  data:
+    redis:
+      host: redis
+      password: ${REDIS_PASSWORD:}
+
+  rabbitmq:
+    host: rabbitmq
+    username: ${RABBITMQ_USER:guest}
+    password: ${RABBITMQ_PASS:guest}
+
+jwt:
+  secret: ${JWT_SECRET}
+
+aes:
+  secret-key: ${AES_SECRET_KEY}
