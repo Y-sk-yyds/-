@@ -67,7 +67,7 @@
         </div>
         <div class="record-diag" v-if="r.diagnosis">诊断：{{ r.diagnosis }}</div>
         <div class="record-content" v-if="r.content">
-          {{ r.content?.length > 80 ? r.content.slice(0, 80) + '...' : r.content }}
+          {{ r.content?.length > 40 ? r.content.slice(0, 40) + '...' : r.content }}
         </div>
       </div>
       <div v-if="!loading && records.length === 0" class="empty-hint">暂无病历记录</div>

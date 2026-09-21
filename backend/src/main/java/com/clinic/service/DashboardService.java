@@ -100,7 +100,7 @@ public class DashboardService {
      */
     private Integer calcTrend(long today, long yesterday) {
         if (today == 0 && yesterday == 0) return null;
-        if (yesterday == 0) return 100;
+        if (yesterday == 0) return null;
         return (int) Math.round((today - yesterday) * 100.0 / yesterday);
     }
 

@@ -1,6 +1,6 @@
 :root {
   /* 诊所主题色系 */
-  --clinic-primary: #2775B6;
+  --clinic-primary: #1c5681;
   --clinic-primary-light: #3B8ED4;
   --clinic-primary-dark: #1A5A8E;
   --clinic-accent: #1ABC9C;
@@ -8,7 +8,7 @@
   --clinic-warning: #F39C12;
   --clinic-danger: #E74C3C;
   --clinic-bg: #F4F7FC;
-  --clinic-sidebar: #1B2838;
+  --clinic-sidebar: #1a2b4a;
   --clinic-card-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
   --clinic-card-hover: 0 4px 20px rgba(0, 0, 0, 0.1);
 

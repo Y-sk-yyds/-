@@ -14,7 +14,7 @@
       - :width 根据 isCollapse 状态切换宽度：展开220px / 折叠72px
       - 深色背景主题，所有菜单使用 router 模式（点击自动导航）
     -->
-    <el-aside :width="isCollapse ? '72px' : '220px'" class="app-sidebar">
+    <el-aside :width="isCollapse ? '62px' : '270px'" class="app-sidebar">
       <!-- Logo 区域：点击可切换侧边栏展开/折叠 -->
       <div class="sidebar-logo" @click="isCollapse = !isCollapse">
         <div class="logo-box">
@@ -272,7 +272,7 @@ const handleLogout = () => {
 .sidebar-menu .el-menu-item {
   border-radius: 8px; margin-bottom: 2px; height: 44px; line-height: 44px;
 }
-.sidebar-menu .el-menu-item:hover { background: rgba(255,255,255,0.08) !important; }
+.sidebar-menu .el-menu-item:hover { background: rgba(159, 25, 105, 0.08) !important; }
 .sidebar-menu .el-menu-item.is-active { background: var(--clinic-primary) !important; color: #fff !important; }
 .menu-item { display: flex; align-items: center; gap: 10px; }
 
@@ -288,8 +288,8 @@ const handleLogout = () => {
 /* ---- 顶部栏样式 ---- */
 .app-header {
   display: flex; align-items: center; justify-content: space-between;
-  height: 60px; background: #fff; padding: 0 24px;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+  height: 60px; background: rgba(29, 61, 131, 0.77); padding: 0 24px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.24);
 }
 .page-title { font-size: 16px; font-weight: 600; color: #1a1a2e; }
 

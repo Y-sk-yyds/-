@@ -95,6 +95,12 @@
 - 库存超卖 bug 修复：PrescriptionService.deductStock() 增加 UPDATE 影响行数检查
 - AES-256 升级：AesUtils.java byte[16]→[32]，application.yml 密钥 31→32 字符
 - init.sql 恢复：sql/init.sql 477行（从 live MySQL dump）
+- **init_full.sql（2026-09-21）**：`sql/init_full.sql` = init.sql 全文 + 扩充演示数据，两文件择一执行。规模：8 医生/30 患者/224 排班/111 挂号/86 就诊+病历/68 处方/111 账单。生成器 `gen_init_full.py`（可重跑调数据量）。
+  - 约定①：过去日期排班 `deleted=1` 归档——避开排班列表按日期升序导致首页全是过期数据，同时挂号列表裸 SQL 联表仍能取到医生/科室
+  - 约定②：挂号费统一 **10.00**（init.sql 旧的 15.00 已废弃，对齐 BillService）
+  - 约定③：病历 content 密文 = AES-256-CBC(key=`clinic-aes-secret-key-for-256bit`, IV=`ClinicSystem-IV-`, PKCS7, Base64)
+  - 约定④：号源 remain_num 由 SQL 统一重算 `total_num - 有效挂号数(status<>0)`，禁止手算
+  - 新增登录账号 doctor03~doctor08，密码同 admin123
 - 论文正文：第一章（引用+可行性分析）✅ 第三章（核心用例）✅ 第六章（性能测试节+第七章修正）✅ 第二章/第四章/第五章待审查
 - 论文配图：用例图/架构图/ER图/流程图 已全部完成 ✅
 - 6.1 补 JMeter 层 + 6.3 数据对齐代码（28/7）+ 6.4/6.5 去重合并
