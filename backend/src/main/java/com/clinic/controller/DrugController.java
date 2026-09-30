@@ -10,6 +10,7 @@ import com.clinic.service.DrugService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.util.Map;
 
 /**
@@ -79,10 +80,11 @@ public class DrugController {
     @GetMapping
     public Result<IPage<Drug>> list(@RequestParam(defaultValue = "1") Integer page,
                                      @RequestParam(defaultValue = "10") Integer pageSize,
-                                     @RequestParam(required = false) String name) {
+                                     @RequestParam(required = false) String name,
+                                     @RequestParam(required = false) Integer status) {
         // 委托 DrugService 执行带条件的分页查询
         requireRole("ADMIN", "DOCTOR");
-        return Result.ok(drugService.pageQuery(page, pageSize, name));
+        return Result.ok(drugService.pageQuery(page, pageSize, name, status));
     }
 
     /**
@@ -106,6 +108,8 @@ public class DrugController {
      *   <li><b>unitPrice</b> (BigDecimal/Number, 必填) — 单价</li>
      *   <li><b>currentStock</b> (Integer, 必填) — 初始库存数量</li>
      *   <li><b>warningThreshold</b> (Integer, 可选, 默认 10) — 库存预警阈值</li>
+     *   <li><b>produceDate</b> (String, 必填) — 生产日期，格式 yyyy-MM-dd</li>
+     *   <li><b>expireDate</b> (String, 必填) — 有效期至，格式 yyyy-MM-dd，须晚于生产日期</li>
      * </ul>
      *
      * <h4>返回值</h4>
@@ -125,6 +129,13 @@ public class DrugController {
         drug.setCategory((String) body.get("category"));
         // 单价转换为 BigDecimal 以保证精度
         drug.setUnitPrice(new java.math.BigDecimal(body.get("unitPrice").toString()));
+        // 效期：录入药品时必须填写生产日期与有效期至
+        // （有效期是过期自动下架与临期预警的唯一依据，缺失会导致药品永久不下架）
+        LocalDate produceDate = parseDate(body.get("produceDate"));
+        LocalDate expireDate = parseDate(body.get("expireDate"));
+        checkExpiryDates(produceDate, expireDate);
+        drug.setProduceDate(produceDate);
+        drug.setExpireDate(expireDate);
         // 新药品默认状态为启用（1-启用, 0-停用）
         drug.setStatus(1);
 
@@ -159,6 +170,8 @@ public class DrugController {
      *   <li><b>unit</b> (String) — 单位</li>
      *   <li><b>category</b> (String) — 分类</li>
      *   <li><b>unitPrice</b> (BigDecimal/Number) — 单价</li>
+     *   <li><b>produceDate</b> (String, 必填) — 生产日期，格式 yyyy-MM-dd</li>
+     *   <li><b>expireDate</b> (String, 必填) — 有效期至，格式 yyyy-MM-dd，须晚于生产日期</li>
      *   <li><b>currentStock</b> (Integer, 可选) — 当前库存量，不传则不更新</li>
      *   <li><b>warningThreshold</b> (Integer, 可选) — 预警阈值，不传则不更新</li>
      * </ul>
@@ -180,6 +193,13 @@ public class DrugController {
         drug.setUnit((String) body.get("unit"));
         drug.setCategory((String) body.get("category"));
         drug.setUnitPrice(new java.math.BigDecimal(body.get("unitPrice").toString()));
+        // 效期：与新增一致，编辑药品时同样必须保留生产日期与有效期至
+        // （不允许清空，否则该药品将脱离自动下架与临期预警的管控）
+        LocalDate produceDate = parseDate(body.get("produceDate"));
+        LocalDate expireDate = parseDate(body.get("expireDate"));
+        checkExpiryDates(produceDate, expireDate);
+        drug.setProduceDate(produceDate);
+        drug.setExpireDate(expireDate);
 
         // 库存信息可选：仅当前端传了对应字段时才提取
         Integer currentStock = body.get("currentStock") != null ?
@@ -190,6 +210,63 @@ public class DrugController {
         // 委托 DrugService 更新药品和库存（库存参数为 null 时不更新）
         drugService.updateDrug(drug, currentStock, warningThreshold);
         return Result.ok();
+    }
+
+    /**
+     * 校验药品效期字段的完整性与先后顺序（内部工具方法）。
+     *
+     * <p>校验规则：</p>
+     * <ul>
+     *   <li>生产日期与有效期至均为必填，缺一不可 ——
+     *       有效期是过期自动下架（{@code DrugExpiryScheduler}）与
+     *       工作台临期预警的唯一判断依据，缺失会使该药品永久脱离管控</li>
+     *   <li>有效期至必须晚于生产日期</li>
+     * </ul>
+     *
+     * @param produceDate 生产日期
+     * @param expireDate  有效期至
+     * @throws IllegalArgumentException 校验不通过时抛出，由全局异常处理器转为 400 响应
+     */
+    private void checkExpiryDates(LocalDate produceDate, LocalDate expireDate) {
+        if (produceDate == null) {
+            throw new IllegalArgumentException("请填写药品生产日期");
+        }
+        if (expireDate == null) {
+            throw new IllegalArgumentException("请填写药品有效期至");
+        }
+        if (!expireDate.isAfter(produceDate)) {
+            throw new IllegalArgumentException("有效期至必须晚于生产日期");
+        }
+    }
+
+    /**
+     * 解析前端传入的日期字段（内部工具方法）。
+     *
+     * <p>兼容三种输入：</p>
+     * <ul>
+     *   <li>{@code null} —— 未传该字段，返回 {@code null}</li>
+     *   <li>空字符串 / 空白串 —— 视为未填写，返回 {@code null}
+     *       （随后由 {@link #checkExpiryDates} 判定为必填缺失）</li>
+     *   <li>{@code "yyyy-MM-dd"} 格式字符串 —— 解析为 {@link LocalDate} 返回</li>
+     * </ul>
+     *
+     * @param value 请求体中的原始字段值
+     * @return 解析后的日期，或 {@code null}
+     * @throws IllegalArgumentException 日期格式非法时抛出
+     */
+    private LocalDate parseDate(Object value) {
+        if (value == null) {
+            return null;
+        }
+        String text = value.toString().trim();
+        if (text.isEmpty()) {
+            return null;
+        }
+        try {
+            return LocalDate.parse(text);
+        } catch (java.time.format.DateTimeParseException e) {
+            throw new IllegalArgumentException("日期格式不正确，应为 yyyy-MM-dd：" + text);
+        }
     }
 
     /**

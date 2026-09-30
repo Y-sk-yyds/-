@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -187,11 +188,16 @@ public class DashboardService {
     // ================================================================
 
     /**
-     * 待办事项——药品库存预警 + 待收费提醒 + 复诊提醒
+     * 待办事项——药品库存预警 + 药品效期提醒 + 待收费提醒 + 复诊提醒
+     *
+     * <p>待办列表为实时聚合结果，不单独建表存储：每项都是由各业务表当前状态
+     * 现查现拼出来的，因此管理员处理完对应问题（补货、更新效期、收费）后，
+     * 待办项会自动消失。</p>
      */
     private List<DashboardVO.TodoItem> buildTodos() {
         List<DashboardVO.TodoItem> todos = new ArrayList<>();
         long idGen = 1;
+        LocalDate today = LocalDate.now();
 
         // 药品库存预警
         List<DrugStock> stocks = drugStockMapper.selectList(new LambdaQueryWrapper<DrugStock>()
@@ -202,6 +208,29 @@ public class DashboardService {
             todos.add(DashboardVO.TodoItem.builder()
                     .id(idGen++).text("库存预警: " + name + " 仅剩 " + s.getCurrentStock() + " 盒")
                     .color("#E74C3C").time("现在").build());
+        }
+
+        // 药品近效期与已过期：距到期不足 NEAR_EXPIRY_DAYS 天的药品已被定时任务自动下架，
+        // 此处统一提醒管理员处理（退药、换药或更新效期）。
+        // 不按 status 过滤：下架后仍需持续提醒，直到药品被清理或效期被更新。
+        List<Drug> expiryDrugs = drugMapper.selectList(new LambdaQueryWrapper<Drug>()
+                .isNotNull(Drug::getExpireDate)
+                .le(Drug::getExpireDate, today.plusDays(DrugExpiryScheduler.NEAR_EXPIRY_DAYS))
+                .orderByAsc(Drug::getExpireDate));
+        for (Drug d : expiryDrugs) {
+            long remainDays = ChronoUnit.DAYS.between(today, d.getExpireDate());
+            boolean expired = remainDays < 0;
+            long absDays = Math.abs(remainDays);
+            todos.add(DashboardVO.TodoItem.builder()
+                    .id(idGen++)
+                    .text((expired ? "药品已过期: " : "药品近效期: ") + d.getName()
+                            + " 有效期至 " + d.getExpireDate()
+                            + (expired ? "（已逾期 " + absDays + " 天）" : "（剩 " + absDays + " 天）")
+                            + "，已自动下架并停止开具，请及时"
+                            + (expired ? "清理库存" : "处理"))
+                    .color(expired ? "#C0392B" : "#F39C12")
+                    .time(expired ? ("已逾期 " + absDays + " 天") : ("剩 " + absDays + " 天"))
+                    .build());
         }
 
         // 待收费提醒

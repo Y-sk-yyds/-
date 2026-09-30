@@ -6,7 +6,7 @@ echo ========================================
 echo.
 
 echo [1/2] Reset MySQL...
-"C:\Program Files\MySQL\MySQL Server 8.4\bin\mysql.exe" -uroot -p199191 --default-character-set=utf8mb4 < "%~dp0sql\init.sql" 2>nul
+"C:\Program Files\MySQL\MySQL Server 8.4\bin\mysql.exe" -uroot -p789456 --default-character-set=utf8mb4 < "%~dp0sql\init.sql" 2>nul
 if %errorlevel% equ 0 (echo   MySQL OK) else (echo   MySQL FAIL)
 
 echo.

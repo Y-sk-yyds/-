@@ -48,6 +48,14 @@
         </template>
       </el-table-column>
       <el-table-column prop="title" label="职称" width="120" />
+      <!-- 挂号费：该医生的单次挂号收费标准，挂号时按此金额生成账单 -->
+      <el-table-column label="挂号费" width="100" align="center">
+        <template #default="{ row }">
+          <el-tag type="warning" size="small" effect="plain">
+            ¥{{ Number(row.registrationFee ?? 10).toFixed(2) }}
+          </el-tag>
+        </template>
+      </el-table-column>
       <el-table-column prop="phone" label="手机号" width="130" />
       <el-table-column prop="username" label="登录账号" width="120" />
       <!-- 账号状态：1=启用，0=禁用 -->
@@ -97,7 +105,7 @@
         <el-row :gutter="16">
           <el-col :span="12">
             <el-form-item label="职称" prop="title">
-              <el-select v-model="form.title" placeholder="选择职称" style="width:100%">
+              <el-select v-model="form.title" placeholder="选择职称" style="width:100%" @change="onTitleChange">
                 <el-option label="主任医师" value="主任医师" />
                 <el-option label="副主任医师" value="副主任医师" />
                 <el-option label="主治医师" value="主治医师" />
@@ -109,6 +117,17 @@
             <el-form-item label="手机号" prop="phone">
               <el-input v-model="form.phone" placeholder="请输入手机号" />
             </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <!-- 挂号费：选择职称后自动带出建议价，可手动调整 -->
+            <el-form-item label="挂号费" prop="registrationFee">
+              <el-input-number v-model="form.registrationFee" :min="0" :max="999" :precision="2" style="width:100%" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <div class="fee-hint">选择职称后自动带出建议价，可手动修改</div>
           </el-col>
         </el-row>
         <el-form-item label="简介">
@@ -133,6 +152,10 @@ import { doctorApi } from '@/api'                 // 医生API
 // 预定义科室列表（下拉选项）
 const departments = ['内科', '外科', '儿科', '妇科', '骨科', '眼科', '口腔科', '皮肤科', '中医科', '耳鼻喉科']
 
+// 职称 → 建议挂号费（元）
+// 仅用于新增/切换职称时带出默认值，最终以表单中填写的金额为准（可手动覆盖）
+const TITLE_FEE = { '主任医师': 50, '副主任医师': 30, '主治医师': 15, '住院医师': 10 }
+
 // -- 表格状态 --
 const loading = ref(false)
 const tableData = ref([])
@@ -151,7 +174,7 @@ const formRef = ref()
 
 // 表单数据
 const form = reactive({
-  name: '', department: '', title: '', phone: '', introduction: ''
+  name: '', department: '', title: '', phone: '', introduction: '', registrationFee: 10
 })
 
 // 验证规则：姓名、科室、职称为必填/必选
@@ -159,6 +182,16 @@ const rules = {
   name: [{ required: true, message: '请输入姓名', trigger: 'blur' }],
   department: [{ required: true, message: '请选择科室', trigger: 'change' }],
   title: [{ required: true, message: '请选择职称', trigger: 'change' }],
+}
+
+/**
+ * onTitleChange - 选择职称后自动带出该职称的建议挂号费
+ *
+ * 注意：仅在用户主动切换下拉时触发；编辑回填（Object.assign）不会触发该事件，
+ * 因此编辑已有医生时不会覆盖其原有定价。
+ */
+function onTitleChange(title) {
+  if (TITLE_FEE[title] !== undefined) form.registrationFee = TITLE_FEE[title]
 }
 
 /**
@@ -187,7 +220,7 @@ async function fetchData() {
  */
 function openCreate() {
   editing.value = null
-  Object.assign(form, { name: '', department: '', title: '', phone: '', introduction: '' })
+  Object.assign(form, { name: '', department: '', title: '', phone: '', introduction: '', registrationFee: 10 })
   showDialog.value = true
 }
 
@@ -245,3 +278,13 @@ async function handleSave() {
 // 组件初始化：加载医生列表
 fetchData()
 </script>
+
+<style scoped>
+/* 挂号费输入框旁的提示文字 */
+.fee-hint {
+  font-size: 12px;
+  color: #909399;
+  line-height: 32px;
+  padding-left: 4px;
+}
+</style>

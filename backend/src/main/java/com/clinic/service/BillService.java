@@ -6,7 +6,9 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.clinic.entity.*;
 import com.clinic.mapper.BillMapper;
+import com.clinic.mapper.DoctorMapper;
 import com.clinic.mapper.PrescriptionDrugMapper;
+import com.clinic.mapper.ScheduleMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,7 +27,7 @@ import java.util.List;
  * </ul>
  * </p>
  * <p>
- * <b>费用构成：</b>总金额 = 挂号费（固定 10 元） + 药品费（药品单价 × 数量累加）
+ * <b>费用构成：</b>总金额 = 挂号费（按出诊医生的定价，10.00 ~ 50.00 元） + 药品费（药品单价 × 数量累加）
  * <br>
  * <b>状态流转：</b>账单状态 0(待支付) → 1(已支付)；处方状态 0(待收费) → 1(已收费)
  * </p>
@@ -42,6 +44,12 @@ public class BillService extends ServiceImpl<BillMapper, Bill> {
     /** 操作处方药品明细表的 Mapper，用于计算药费 */
     private final PrescriptionDrugMapper prescriptionDrugMapper;
 
+    /** 操作排班表的 Mapper，用于由挂号记录定位出诊医生 */
+    private final ScheduleMapper scheduleMapper;
+
+    /** 操作医生表的 Mapper，用于读取该医生的挂号费定价 */
+    private final DoctorMapper doctorMapper;
+
     /** 药品服务，用于查询药品单价 */
     private final DrugService drugService;
 
@@ -50,6 +58,13 @@ public class BillService extends ServiceImpl<BillMapper, Bill> {
 
     /** 处方服务，用于支付时同步更新处方状态 */
     private final PrescriptionService prescriptionService;
+
+    /**
+     * 挂号费兜底值（元）
+     * <p>当医生未配置挂号费（字段为 NULL）或配置为非法值（≤ 0）时使用，
+     * 确保账单的挂号费与总金额永远不会出现 NULL 或负数。</p>
+     */
+    private static final BigDecimal DEFAULT_REGISTRATION_FEE = new BigDecimal("10.00");
 
     /**
      * 分页查询账单记录
@@ -75,7 +90,7 @@ public class BillService extends ServiceImpl<BillMapper, Bill> {
      * 业务执行流程：
      * <ol>
      *   <li>查询挂号记录，获取就诊基本信息</li>
-     *   <li>设置固定挂号费为 10.00 元</li>
+     *   <li>按出诊医生定价确定挂号费：挂号 → 排班 → 医生 → registration_fee</li>
      *   <li>如果有处方，查询处方关联的所有药品明细，
      *       累加计算药品费用：∑(药品单价 × 数量)</li>
      *   <li>总金额 = 挂号费 + 药品费</li>
@@ -95,7 +110,9 @@ public class BillService extends ServiceImpl<BillMapper, Bill> {
         if (!exists) {
             bill = new Bill();
             bill.setRegistrationId(registrationId);
-            bill.setRegistrationFee(new BigDecimal("10.00"));
+            // 挂号费按出诊医生的定价确定，在挂号那一刻固化写入账单。
+            // 此后医生调价不影响本账单，保证患者按挂号当时的价格结算。
+            bill.setRegistrationFee(resolveRegistrationFee(registrationId));
             bill.setStatus(0);
         }
 
@@ -121,6 +138,41 @@ public class BillService extends ServiceImpl<BillMapper, Bill> {
         saveOrUpdate(bill);
 
         return bill;
+    }
+
+    /**
+     * 解析某次挂号应收的挂号费
+     *
+     * <p>取值链路：</p>
+     * <pre>
+     * registration.scheduleId → schedule.doctorId → doctor.registration_fee
+     * </pre>
+     *
+     * <p>任一层查询不到、或医生未配置有效价格（NULL 或 ≤ 0）时，
+     * 统一回退为 {@link #DEFAULT_REGISTRATION_FEE}（10.00 元），
+     * 保证账单金额字段永不为 NULL。</p>
+     *
+     * @param registrationId 挂号记录ID
+     * @return 该次挂号应收取的挂号费（元）
+     */
+    private BigDecimal resolveRegistrationFee(Long registrationId) {
+        Registration registration = registrationService.getById(registrationId);
+        if (registration == null || registration.getScheduleId() == null) {
+            return DEFAULT_REGISTRATION_FEE;
+        }
+
+        Schedule schedule = scheduleMapper.selectById(registration.getScheduleId());
+        if (schedule == null || schedule.getDoctorId() == null) {
+            return DEFAULT_REGISTRATION_FEE;
+        }
+
+        Doctor doctor = doctorMapper.selectById(schedule.getDoctorId());
+        if (doctor == null || doctor.getRegistrationFee() == null
+                || doctor.getRegistrationFee().compareTo(BigDecimal.ZERO) <= 0) {
+            return DEFAULT_REGISTRATION_FEE;
+        }
+
+        return doctor.getRegistrationFee();
     }
 
     /**

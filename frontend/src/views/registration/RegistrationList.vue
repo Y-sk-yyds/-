@@ -193,7 +193,16 @@ function getDoctorDept(id) {
  * 格式：YYYY-MM-DD 上午/下午 | 医生名 (科室)
  */
 function renderSchedule(s) {
-  return `${s.workDate} ${s.period === 'AM' ? '上午' : '下午'} | ${getDoctorName(s.doctorId)} (${getDoctorDept(s.doctorId)})`
+  return `${s.workDate} ${s.period === 'AM' ? '上午' : '下午'} | ${getDoctorName(s.doctorId)} (${getDoctorDept(s.doctorId)}) | 挂号费 ¥${Number(getDoctorFee(s.doctorId)).toFixed(2)}`
+}
+
+/**
+ * getDoctorFee - 根据医生ID取该医生的挂号费定价
+ * 用于在挂号时向操作员明示本次挂号将生成的账单金额
+ */
+function getDoctorFee(id) {
+  const d = doctorList.value.find(d => d.id === id)
+  return d?.registrationFee ?? 10
 }
 
 /**

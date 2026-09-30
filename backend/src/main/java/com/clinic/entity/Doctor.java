@@ -7,6 +7,8 @@ import com.clinic.common.BaseEntity;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 
+import java.math.BigDecimal;
+
 /**
  * <h2>医生实体类</h2>
  *
@@ -30,6 +32,7 @@ import lombok.EqualsAndHashCode;
  *   <tr><td>title</td><td>title</td><td>VARCHAR</td><td>职称</td></tr>
  *   <tr><td>phone</td><td>phone</td><td>VARCHAR</td><td>联系电话</td></tr>
  *   <tr><td>introduction</td><td>introduction</td><td>VARCHAR</td><td>个人简介</td></tr>
+ *   <tr><td>registrationFee</td><td>registration_fee</td><td>DECIMAL</td><td>挂号费（元）</td></tr>
  *   <tr><td>userId</td><td>user_id</td><td>BIGINT</td><td>关联系统用户ID</td></tr>
  * </table>
  *
@@ -75,6 +78,20 @@ public class Doctor extends BaseEntity {
      * 供患者在挂号时作为选择医生的参考
      */
     private String introduction;
+
+    /**
+     * 挂号费（元），该医生的单次挂号收费标准。
+     *
+     * <p>采用「按医生定价」而非「按职称统一映射」，原因是同一职称的医生
+     * 在实际诊所中挂号费也可能存在差异（资历、专长、出诊时段等）。
+     * 定价梯度为 10.00 ~ 50.00 元，职称越高通常价位越高。</p>
+     *
+     * <p>取值链路：患者挂号 → {@code registration.scheduleId} →
+     * {@code schedule.doctorId} → 本字段。患者挂号那一刻，
+     * 该费用即固化写入 {@code bill.registration_fee}，
+     * 此后修改医生定价不影响已生成的账单。</p>
+     */
+    private BigDecimal registrationFee;
 
     /**
      * 关联的系统用户ID，指向 {@link User} 表的主键。

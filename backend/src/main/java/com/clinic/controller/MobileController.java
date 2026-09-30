@@ -42,11 +42,15 @@ public class MobileController {
 
         List<Map<String, Object>> result = new ArrayList<>();
         for (Schedule s : list) {
+            Doctor doc = doctorMap.get(s.getDoctorId());
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("id", s.getId());
             m.put("doctorId", s.getDoctorId());
-            m.put("doctorName", doctorMap.getOrDefault(s.getDoctorId(), new Doctor()).getName());
-            m.put("department", doctorMap.getOrDefault(s.getDoctorId(), new Doctor()).getDepartment());
+            m.put("doctorName", doc != null ? doc.getName() : "");
+            m.put("department", doc != null ? doc.getDepartment() : "");
+            m.put("title", doc != null ? doc.getTitle() : "");
+            // 挂号费：该医生定价，供移动端挂号前向患者明示费用
+            m.put("registrationFee", doc != null ? doc.getRegistrationFee() : null);
             m.put("workDate", s.getWorkDate());
             m.put("period", s.getPeriod());
             m.put("remainNum", s.getRemainNum());

@@ -1,15 +1,16 @@
 package com.clinic.entity;
 
+import com.baomidou.mybatisplus.annotation.FieldStrategy;
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.clinic.common.BaseEntity;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 
-import com.baomidou.mybatisplus.annotation.TableField;
-
 import java.math.BigDecimal;
+import java.time.LocalDate;
 
 /**
  * <h2>药品实体类</h2>
@@ -40,6 +41,8 @@ import java.math.BigDecimal;
  *   <tr><td>unit</td><td>unit</td><td>VARCHAR</td><td>单位（如 盒、瓶、支）</td></tr>
  *   <tr><td>unitPrice</td><td>unit_price</td><td>DECIMAL</td><td>单价</td></tr>
  *   <tr><td>category</td><td>category</td><td>VARCHAR</td><td>药品分类</td></tr>
+ *   <tr><td>produceDate</td><td>produce_date</td><td>DATE</td><td>生产日期</td></tr>
+ *   <tr><td>expireDate</td><td>expire_date</td><td>DATE</td><td>有效期至</td></tr>
  *   <tr><td>status</td><td>status</td><td>INT</td><td>状态：1-启用，0-停用</td></tr>
  * </table>
  *
@@ -88,6 +91,42 @@ public class Drug extends BaseEntity {
      * "抗生素"、"解热镇痛"、"中成药"、"心血管"等
      */
     private String category;
+
+    /**
+     * 生产日期
+     *
+     * <p>为该批次药品的生产日期，与 {@link #expireDate} 配合计算剩余效期。
+     * 允许为 NULL —— 历史数据或未登记效期的药品不参与效期判断。</p>
+     *
+     * <p><b>更新策略：</b>使用 {@code FieldStrategy.IGNORED}，
+     * 使 null 值也能写入数据库。MyBatis-Plus 默认策略为 NOT_NULL，
+     * 若沿用默认值，管理员清空有效期时将静默失效（旧值残留），
+     * 导致工作台的过期提醒无法消除。</p>
+     */
+    @TableField(updateStrategy = FieldStrategy.IGNORED)
+    private LocalDate produceDate;
+
+    /**
+     * 有效期至
+     *
+     * <p><b>效期语义：</b>「有效期至 2026-10-20」表示 10-20 当天仍可销售使用，
+     * 次日起失效。因此过期判定条件为 {@code expire_date < 当前日期}（严格小于）。</p>
+     *
+     * <p>允许为 NULL —— 未登记效期的药品不参与过期判断，
+     * 避免历史数据被误判为过期而下架。</p>
+     *
+     * <p>系统据此字段实现两级管理：</p>
+     * <ul>
+     *   <li><b>临期预警</b> —— 距到期 ≤ 30 天，工作台提示，药品仍可正常开具</li>
+     *   <li><b>过期下架</b> —— 已过期，定时任务自动将 {@link #status} 置为 0，
+     *       医生开方时被拒绝</li>
+     * </ul>
+     *
+     * <p><b>更新策略：</b>同 {@link #produceDate}，使用 {@code FieldStrategy.IGNORED}
+     * 以支持清空效期。</p>
+     */
+    @TableField(updateStrategy = FieldStrategy.IGNORED)
+    private LocalDate expireDate;
 
     /**
      * 药品状态

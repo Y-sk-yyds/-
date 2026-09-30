@@ -19,8 +19,13 @@
     <div class="schedule-list" v-loading="loading">
       <div class="schedule-card" v-for="s in schedules" :key="s.id" @click="showRegister(s)">
         <div>
-          <div class="doctor-name">{{ s.doctorName }}</div>
+          <div class="doctor-name">
+            {{ s.doctorName }}
+            <span class="doctor-title" v-if="s.title">· {{ s.title }}</span>
+          </div>
           <div class="doctor-dept">{{ s.department }}</div>
+          <!-- 挂号费：向患者明示本次挂号将产生的费用 -->
+          <div class="doctor-fee">挂号费 ¥{{ Number(s.registrationFee ?? 10).toFixed(2) }}</div>
         </div>
         <div class="schedule-detail">
           <span class="period-tag" :class="s.period === 'AM' ? 'am' : 'pm'">
@@ -37,10 +42,11 @@
     <!-- 挂号弹窗 -->
     <el-dialog v-model="showDialog" title="确认挂号" width="85%" top="15vh" :close-on-click-modal="false">
       <div class="register-info" v-if="selectedSchedule">
-        <p><strong>医生：</strong>{{ selectedSchedule.doctorName }}</p>
+        <p><strong>医生：</strong>{{ selectedSchedule.doctorName }}<span v-if="selectedSchedule.title"> · {{ selectedSchedule.title }}</span></p>
         <p><strong>科室：</strong>{{ selectedSchedule.department }}</p>
         <p><strong>时间：</strong>{{ selectedSchedule.workDate }} {{ selectedSchedule.period === 'AM' ? '上午' : '下午' }}</p>
         <p><strong>剩余号源：</strong>{{ selectedSchedule.remainNum }}</p>
+        <p><strong>挂号费：</strong><span class="fee-text">¥{{ Number(selectedSchedule.registrationFee ?? 10).toFixed(2) }}</span></p>
       </div>
       <div class="form-row">
         <label>手机号：</label>
@@ -207,7 +213,10 @@ onMounted(() => { selectedDate.value = dates.value[0].value; fetchSchedules() })
 .schedule-card { background: #fff; border-radius: 10px; padding: 16px; margin-bottom: 10px; display: flex; align-items: center; cursor: pointer; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
 .schedule-card > *:first-child { flex: 1; }
 .doctor-name { font-size: 16px; font-weight: 500; }
+.doctor-title { font-size: 12px; color: #909399; font-weight: normal; }
 .doctor-dept { font-size: 12px; color: #909399; }
+.doctor-fee { font-size: 12px; color: #e6a23c; margin-top: 2px; }
+.fee-text { color: #e6a23c; font-weight: 600; font-size: 16px; }
 .schedule-detail { text-align: center; margin-right: 12px; }
 .period-tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; }
 .period-tag.am { background: #e6f7ff; color: #1890ff; }

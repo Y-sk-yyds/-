@@ -55,9 +55,11 @@ public class DrugService extends ServiceImpl<DrugMapper, Drug> {
      * @param page     页码
      * @param pageSize 每页大小
      * @param name     药品名称（可选，模糊匹配）
+     * @param status   药品状态（可选）。1=在用，0=已停用/已过期下架；
+     *                 传 null 表示不筛选状态，查询全部药品
      * @return 分页的药品记录列表（含库存数据）
      */
-    public IPage<Drug> pageQuery(Integer page, Integer pageSize, String name) {
+    public IPage<Drug> pageQuery(Integer page, Integer pageSize, String name, Integer status) {
         LambdaQueryWrapper<Drug> wrapper = new LambdaQueryWrapper<>();
 
         // 药品名称模糊搜索
@@ -65,8 +67,14 @@ public class DrugService extends ServiceImpl<DrugMapper, Drug> {
             wrapper.like(Drug::getName, name);
         }
 
-        // 仅查询启用状态（status=1）的药品，排除已停用的药品
-        wrapper.eq(Drug::getStatus, 1).orderByDesc(Drug::getCreateTime);
+        // 状态筛选：传入则精确过滤，不传则查询全部。
+        // 之所以不强制 eq(status, 1)：过期药品会被定时任务自动置为 status=0，
+        // 若列表始终过滤停用状态，管理员将看不到被下架的药品、无法重新处理。
+        if (status != null) {
+            wrapper.eq(Drug::getStatus, status);
+        }
+
+        wrapper.orderByDesc(Drug::getCreateTime);
 
         IPage<Drug> result = baseMapper.selectPage(new Page<>(page, pageSize), wrapper);
 

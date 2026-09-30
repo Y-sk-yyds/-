@@ -14,6 +14,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
+import java.time.LocalDate;
 
 /**
  * 处方服务类
@@ -71,6 +72,7 @@ public class PrescriptionService extends ServiceImpl<PrescriptionMapper, Prescri
      * <p>
      * 业务执行流程：
      * <ol>
+     *   <li>校验药品可开具状态（未停用、未进入近效期），任一不合格立即抛错</li>
      *   <li>遍历请求中的药品列表，对每种药品执行库存扣减（使用 Redis 分布式锁保证并发安全）</li>
      *   <li>创建处方主记录，状态设为 0（待收费）</li>
      *   <li>为处方中的每种药品创建明细记录（处方-药品关联表）</li>
@@ -79,17 +81,48 @@ public class PrescriptionService extends ServiceImpl<PrescriptionMapper, Prescri
      *
      * @param request 处方创建请求，包含就诊ID、医生ID、诊断、处方内容、药品清单
      * @return 创建的处方记录
-     * @throws IllegalArgumentException 库存不足或系统繁忙时抛出
+     * @throws IllegalArgumentException 药品已下架/近效期/已过期、库存不足或系统繁忙时抛出
      */
     @Transactional
     public Prescription createPrescription(PrescriptionCreateRequest request) {
-        // ===== 第1步：批量扣减药品库存 =====
+        // ===== 第1步：校验药品可开具状态 =====
+        // 先整体校验、再扣减库存，任一药品不可用时立即失败，
+        // 避免为排在前面的药品做无谓的分布式锁获取与释放。
+        // 校验两层：① 药品未被停用/下架；② 药品不在近效期窗口内（兜底，正常由定时任务下架）。
+        LocalDate today = LocalDate.now();
+        for (var item : request.getDrugs()) {
+            Drug drug = drugService.getById(item.getDrugId());
+            if (drug == null) {
+                throw new IllegalArgumentException("药品不存在，ID：" + item.getDrugId());
+            }
+            if (drug.getStatus() == null || drug.getStatus() != 1) {
+                String reason = drug.getExpireDate() != null
+                        ? "（有效期至 " + drug.getExpireDate() + "，已自动下架）"
+                        : "（已停用）";
+                throw new IllegalArgumentException(
+                        "药品 [" + drug.getName() + "] 已下架，无法开具" + reason);
+            }
+            // 近效期（剩余不足 NEAR_EXPIRY_DAYS 天）与已过期药品一律禁止开具，
+            // 与 DrugExpiryScheduler 的自动下架口径保持一致；
+            // 定时任务尚未扫到时也会被这里拦下，避免近效期药品被开出去。
+            if (drug.getExpireDate() != null
+                    && !drug.getExpireDate().isAfter(today.plusDays(DrugExpiryScheduler.NEAR_EXPIRY_DAYS))) {
+                boolean expired = drug.getExpireDate().isBefore(today);
+                throw new IllegalArgumentException(
+                        "药品 [" + drug.getName() + "] 有效期至 " + drug.getExpireDate()
+                                + (expired ? "，已过期" : "，已进入近效期（不足 "
+                                        + DrugExpiryScheduler.NEAR_EXPIRY_DAYS + " 天）")
+                                + "，禁止开具");
+            }
+        }
+
+        // ===== 第2步：批量扣减药品库存 =====
         // 遍历处方中的每种药品，使用分布式锁逐一扣减库存
         for (var item : request.getDrugs()) {
             deductStock(item.getDrugId(), item.getQuantity());
         }
 
-        // ===== 第2步：创建处方主记录 =====
+        // ===== 第3步：创建处方主记录 =====
         Prescription prescription = new Prescription();
         prescription.setConsultationId(request.getConsultationId());
         prescription.setDoctorId(request.getDoctorId());
@@ -98,7 +131,7 @@ public class PrescriptionService extends ServiceImpl<PrescriptionMapper, Prescri
         prescription.setStatus(0);  // 状态：0 = 待收费
         save(prescription);
 
-        // ===== 第3步：创建处方药品明细记录 =====
+        // ===== 第4步：创建处方药品明细记录 =====
         // 将每种药品的用法、用量、频次等信息写入关联表
         for (var item : request.getDrugs()) {
             PrescriptionDrug pd = new PrescriptionDrug();

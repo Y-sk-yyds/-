@@ -54,6 +54,14 @@
           {{ getDoctorDept(row.doctorId) }}
         </template>
       </el-table-column>
+      <!-- 挂号费：取自该医生的定价，便于管理员核对各医生的收费标准 -->
+      <el-table-column label="挂号费" width="90" align="center">
+        <template #default="{ row }">
+          <el-tag type="warning" size="small" effect="plain">
+            ¥{{ Number(getDoctorFee(row.doctorId)).toFixed(2) }}
+          </el-tag>
+        </template>
+      </el-table-column>
       <el-table-column prop="workDate" label="日期" width="110" align="center" />
       <!-- 时段标签 -->
       <el-table-column label="时段" width="80" align="center">
@@ -172,8 +180,8 @@ const rules = {
 }
 
 /**
- * getDoctorName / getDoctorDept - 辅助函数
- * 根据医生ID从 doctorList 中查找对应医生的姓名/科室
+ * getDoctorName / getDoctorDept / getDoctorFee - 辅助函数
+ * 根据医生ID从 doctorList 中查找对应医生的姓名/科室/挂号费
  * 用于表格中显示医生关联信息
  */
 function getDoctorName(id) {
@@ -183,6 +191,11 @@ function getDoctorName(id) {
 function getDoctorDept(id) {
   const d = doctorList.value.find(d => d.id === id)
   return d?.department || '-'
+}
+// 挂号费：该医生的定价，用于向管理员明示各医生出诊的收费标准
+function getDoctorFee(id) {
+  const d = doctorList.value.find(d => d.id === id)
+  return d?.registrationFee ?? 10
 }
 
 /**
