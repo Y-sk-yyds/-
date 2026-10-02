@@ -34,7 +34,9 @@
 - 统一返回: Result<T> { code, message, data }
 - 实体基类: BaseEntity (createTime/updateTime/deleted)
 - 权限: 单角色 ADMIN/DOCTOR/CASHIER
-- MySQL: 本机 8.4, root/**789456**, 3306（旧记录 123456/199191 均已失效，以 789456 为准）
+- MySQL: 本机 8.4, 3306；**库名 `clinic_db`**（不是 `clinic`，误用会报 1049）
+- **MySQL 密码不要硬记明文**：一律优先用根目录 `reset.bat`（脚本内已配好），
+  或 **Read** 读 `backend/src/main/resources/application.yml`（grep 同一文件可能返回脱敏值，不可信）
 - JDK: Java 18, /d/work/jdk/openjdk-18+36_windows-x64_bin/jdk-18
 - Node: 22.22.2 managed
 - MySQL 客户端: C:\Program Files\MySQL\MySQL Server 8.4\bin\mysql.exe
@@ -72,6 +74,8 @@
 - **重置数据库一律优先用根目录 `reset.bat`**（2026-09-30 实测跑通：= `mysql < sql/init.sql` + `docker exec clinic-redis redis-cli FLUSHDB`，密码/路径/容器名均已配好）。**不要手工另敲一套命令**，也不要在 `sql/` 下另造重置脚本。仅当后台无人值守（`pause` 会卡住）时才拆成命令执行
 - **`sql/` 下只有一个脚本：`sql/init.sql`**（13 张表 + 全量演示数据，144KB）——`docker-compose.yml` 与 `reset.bat` 都指向它。生成器 `gen_init_full.py` 的输入模板在 `tools/init_template.sql`（13 表 DDL + 最少种子，**勿直接执行**），生成器输出**原地覆盖** `sql/init.sql`。不要再新增补丁 / 备份 / 第二份 init
 - 2026-09-30 收敛前曾并存 `init.sql`(基础版) + `init_full.sql`(完整版) 两个文件，**已合并为一个**；`patch_v2_doctor_fee_drug_expiry.sql` 与 `sql/backup/` 已删除
+- **init.sql 结构已核验与实体/线上库逐列一致**（2026-10-02）：13 表 / 133 列，DDL↔`information_schema` 13/13 完全一致，13 个实体零缺列。P8 的 3 个新列（`doctor.registration_fee`、`drug.produce_date`、`drug.expire_date`）**已在 init.sql 内**，分级定价与效期分布都用 `UPDATE ... WHERE` 补（相对日期，任何时候初始化分布相同）；**分单结算 / 挂号即缴费未加任何列**（靠 `bill.prescription_id` 判单据类型）。init.sql 由「基础种子（无 id 自增）+ 扩展种子（显式 id 从 N+1 接编）」两段组成，**无 DELETE**
+- **演示/验收前先跑 `reset.bat`**：线上库会因手动测试变脏（2026-10-02 曾多出 7 条张三的 10-02 挂号 + 1 个测试药品 `wqeq`，而 init.sql 是 109 挂号 / 12 药品）
 - 每次改后端代码需重启(IDE热更新不覆盖SQL/XML等)
 - PrescriptionService ↔ BillService 存在循环依赖风险，涉及账单的操作放 Controller 层
 - AES 加密: key=32字节(AES-256), IV="ClinicSystem-IV-", CBC模式
@@ -82,7 +86,9 @@
   这与项目配置无关，application.yml / target 里都是 8080
 - 验证接口速查：登录 `POST /api/auth/login`（admin/admin123 → data.token，短 token 直接作 Bearer）；
   工作台 `GET /api/dashboard`（`data.todos[]` 含 color/text/time）；药品 `GET /api/drugs?page=1&pageSize=20`
-- MySQL 密码 **789456**（非长期记忆里的 199191）
+- MySQL 库名 **`clinic_db`**；密码取值原则见上方"技术约定"（不硬记明文，用 reset.bat 或 Read application.yml）
+- 移动端排班接口：`GET /api/mobile/schedules?workDate=YYYY-MM-DD`（免登录，返回当日全部排班 16 条，
+  含 `department`/`title`/`registrationFee`/`remainNum`）
 
 ## 项目状态（截至 2026-09-30）
 ### 已完成
@@ -191,6 +197,142 @@ Layout 组件重新挂载 → 所有页面数据按新 token 重拉 → 零串�
 
 **演示主路径**：admin（工作台药品待办 → 医生挂号费分级 → 药品效期 → 建档/挂号/收费）
 → doctor01（接诊 → 开处方）→ cashier01（收费结算）。
+
+### ✅ P9 移动端体验优化（2026-10-02 完成并实测）
+
+**a) 排班页「科室分类 + 医生搜索」**（`MobileHome.vue`）
+- 搜索框（医生姓名/科室/职称）+ 科室 chips（由当日排班**动态推导**）+ 结果计数 + 空态双提示
+- **纯前端过滤，后端零改动**（每天仅 16 条排班，接口已返回全部字段）→ **论文 API 表无需改**
+
+**b) 就诊页「四分区 + 分天排队看板」**（`MobileRecords.vue` + `MobileController.myData()`）
+- 挂号列表四分区（**互斥**，空分区不渲染）：💳待缴费 → 📍今日就诊 → 🗓即将就诊 → 📁历史记录
+- 排队看板由"单个排班"改为 **`queueGroups` 按排班分组**（一天一组，组头含 就诊日 + 上午/下午 + 医生）
+- `my-data` 的 `registrations` 补全 `workDate/period/doctorName/department/title/billId/billStatus/billAmount`，
+  排序为「今天优先 → 未来升序 → 过去倒序，同日 AM 在 PM 前」；新增返回 `today`（服务端下发，防客户端时区误差）
+
+**★ 两个关键坑（改移动端就诊页必须先看）**
+1. **`registration.registration_date` 是"挂号操作那天"，不是"就诊那天"**
+   （`RegistrationService:177` 写死 `LocalDate.now()`）→ 按就诊日分组**必须用 `schedule.work_date`**
+2. **历史挂号的排班已归档 `deleted=1`**，`scheduleService.listByIds()` 会被 MyBatis-Plus
+   逻辑删除拦截器自动过滤 → 就诊日期/医生全部丢失。**必须用新增的**
+   `ScheduleMapper.selectByIdsIncludeDeleted()`（原生 `@Select`，不受拦截器影响）。
+   PC 端挂号列表靠裸 SQL `LEFT JOIN` 绕过（`RegistrationMapper.xml:28-31` 不带 `s.deleted=0`）
+
+- 验证：`mvn compile` + `npm run build` 均 exit=0；**另起 8081 后端实例做端到端实测**
+  （`unset SERVER__PORT SERVER__HOST && SERVER_PORT=8081 mvn -o spring-boot:run`，不干扰 8080），
+  四分区/排序/分组全部符合预期；测试数据已清理（排班 9 恢复 30/30，Redis key 已删）
+- 顺手修：`MobileHome.vue` 日期 tabs 的 `toISOString()` UTC 偏移（GMT+8 凌晨 0~8 点会把"今天"算成昨天）
+- 详见 `.workbuddy/memory/2026-10-02.md`
+
+### ✅ P10 移动端「聚焦当天」（2026-10-02 完成并实测）
+
+用户反馈："我的挂号显示了太多天的内容"、"排队等待应该显示当天的上午/下午排班"。
+
+**a) 排队看板 → 只显示今天**
+- 后端 `MobileController.myData()`：`activeScheduleIds` 增加 `.filter(workDate == today)`，
+  只下发今天的排班组（上午 AM / 下午 PM 各一块，同日 AM 在前）
+- ⚠️ **踩坑**：`scheduleMap` 在上面被重新赋值过，lambda 内引用会报
+  "lambda 表达式引用的本地变量必须是最终变量" → 必须加 `final Map<Long, Schedule> schedMap = scheduleMap;`
+- 前端表头由「就诊日+时段+医生」简化为「时段+医生+人数」，顶部加一行「今日排队 10/02」
+- 其他日期预约（`status=1 && workDate != today`）不进看板，收成一行
+  「还有其他日期的预约 N 个 ›」→ 点击切到 `tab = 'registrations'`
+
+**b) 我的挂号 → 历史记录折叠**
+- 新增 `HISTORY_SHOW = 3` + `historyExpanded` ref + `visibleList(sec)`
+- 历史分区默认只渲染最近 3 笔，超出显示「展开全部 N 笔 ⌄」/「收起 ⌃」
+- `loadData()` 里重置 `historyExpanded = false`（换患者/刷新回到折叠态）
+- 四分区结构与互斥规则不变
+
+验证（8081 实例端到端，3 场景）：
+| 场景 | 排队看板 | 其他日期提示 | 历史折叠 |
+|---|---|---|---|
+| 张三（今天有号 + 5 笔历史） | 1 组（今天 PM） | 0 | 3/5 |
+| 高文博（只有明天有号） | 0 组 → 空态 | 1（10-03 AM） | 3/3 |
+| 张三 + 现造 10-03 挂号 | 仍 1 组（只今天） | 1（10-03 AM） | 3/5 |
+
+测试数据已清理（排班 7 回 30/30、Redis key 已删）；`mvn compile` + `npm run build` 均 exit=0。
+
+### ✅ P11 账单「分单结算」：挂号费单 + 药费单（2026-10-02 完成并实测）
+
+**用户诉求**："挂号成功就要缴费，后面的药品支付可以慢点交" → 明确"挂号就是要先交钱"。
+
+**⚠️ 动因是一个既有 bug**：改造前一张账单承载「挂号费+药费」，挂号时创建、开方时**原地追加**。
+`BillService.createBill` 的 `setStatus(0)` 只写在新建分支里 → 患者先付挂号费（status=1）后，
+开方追加药费只改金额**不重置状态** → **药费白送**，收银台也看不到待收款。
+
+**★ 分单规则（改账单代码前必看）**
+| 账单 | 生成时机 | `prescription_id` | `registration_fee` | `drug_fee` |
+|---|---|---|---|---|
+| 挂号费单 | 挂号时 | `NULL` | 挂号费 | 0.00 |
+| 药费单 | 医生开方后 | 处方ID | 0.00 | 药费 |
+
+- `BillService`：`createBill(regId, prescId)` 降级为**兼容入口**（按 prescId 分流）；
+  新增 `createRegistrationBill(regId)` / `createDrugBill(regId, prescId)`
+- `resolveFeeType(bill)` **静态方法**由金额推导类型（`REGISTRATION`/`DRUG`/`MIXED`），**未加数据库列**
+- **禁用 `getOne(registrationId)` 查账单**——一条挂号有多张，会抛 `TooManyResultsException`；
+  必须 `list(in(regIds))` 内存分组
+- 移动端 `register` 返回 `registrationId`/`billId`/`billAmount`；`my-data` 的 regView 新增 `bills[]`
+  （逐笔账单），保留 `billId`/`billStatus`/`billAmount` 兼容汇总字段
+- 前端：`MobileRecords.vue` 卡片内**逐行**渲染账单（各带"去支付"）；`BillList.vue` 加「费用类型」列
+- 移动端挂号缴费流程于同日进一步收紧，见 **P12**
+
+**实测**（8081 + 完整链路：挂号→付挂号费→接诊→开方→付药费）：
+| bill | 挂号 | 处方 | 挂号费 | 药费 | 总额 | 状态 |
+|---|---|---|---|---|---|---|
+| 114 | 114 | NULL | 50.00 | 0.00 | 50.00 | 已支付 |
+| 115 | 114 | 71 | 0.00 | 52.00 | 52.00 | 待支付 |
+
+挂号费付清后开方，药费**单独成单**、挂号费单未被污染 ✓。测试数据已清理（含 `drug_stock` 恢复）。
+
+### ✅ P12 移动端挂号「先缴费，后挂号」一次调用（2026-10-02 完成并实测）
+
+**用户诉求**："挂号还是有问题，一定要先缴费，不能稍后，交完钱才可以挂号。"
+（P11 里留的"稍后缴费"按钮被否决）
+
+**核心约束：库中不允许存在"已挂号但挂号费未缴"的状态。**
+
+- 后端 `MobileController.register`：`createRegistration`（Redis Lua 扣号源）→ `createRegistrationBill`
+  → `billService.pay`，**串在一次调用里**；任一步抛异常则
+  `billService.removeById(bill)` + `registrationService.cancelRegistration(regId)` **整体回退**。
+  请求体新增 `paymentMethod`（默认 `WECHAT`），返回新增 `paymentMethod` / `paid=true`。
+- 前端 `MobileHome.vue`：
+  - 「确认挂号」弹窗 → 按钮改 **"下一步：缴费"**（纯前端校验手机号格式，此时**还没调挂号接口**）
+  - 缴费弹窗标题 **"确认挂号并缴费"**：金额 + 医生信息 + **微信/支付宝二选一** +
+    按钮"支付 ¥xx 并挂号"，**删除 `payLater` / `enterPayFlow` / `registerBill`**
+  - 手机号未建档时在支付那一步报错 → 关缴费弹窗转「建档」→ 建档成功后**回到缴费**（不再直接挂号）
+  - 成功弹窗显示排队号 + "挂号费 ¥xx 已支付"
+- **PC 端 `RegistrationController` 明确不改**（2026-10-02 用户确认）：仍为
+  "挂号 → 生成待收挂号费单 → 收银台收款"。**理由：PC 端必须登录，患者进不去**
+  （H5 免登录页面才是患者自助入口），故"先缴费才能挂号"只约束移动端。
+  PC 挂出来的挂号费单若未收，会正常出现在患者移动端「待缴费」里，可自行补缴。
+
+**实测（8081，全部通过）**
+| 场景 | 结果 |
+|---|---|
+| 挂号（郑十 → 排班5，ALIPAY） | `{"queueNum":1,"registrationId":118,"billId":119,"billAmount":50.00,"paid":true}` |
+| 库内状态 | 挂号 118 `status=1`；账单 119 `挂号费=50, 药费=0, status=1, payment_method=ALIPAY`；**该挂号未付账单数=0** |
+| 号源 | 排班5 `30→29`，Redis `schedule:stock:5=29` |
+| `my-data` | 挂号 118 `billStatus=1` **不在「待缴费」分区**；郑十待缴费 0 笔 |
+| 重复挂号同一号源 | `400 您已挂过该号源`，无新增记录、号源不再扣 |
+| 未建档手机号 | `400 未找到该手机号对应的患者`，无新增 |
+| 号源已满（Redis 临时置 0） | `400 号源已满`，无新增记录 |
+
+`mvn -q -o compile` exit=0；`npm run build` exit=0（MobileHome 9.63kB）；
+Vite 编译 HTTP 200，标记 `payMethod`×7 / `payAmount`×5 / `cancelPay`×3 / `pm-item`×2，
+旧标记 `payLater`/`enterPayFlow`/`registerBill`/`稍后缴费` 均 **0**。
+
+测试数据已清理（挂号 118 + 账单 119 删除、排班5 回 `30/30`、Redis key 删除、`_md.json` 删除）。
+
+> ⚠️ **踩坑**：用 `curl -H "Authorization: Bearer ..."` 时**手工粘贴 JWT 会被工具输出的脱敏文本
+> 污染**（拿到假 token → 403 白排查）。正确姿势：登录响应重定向到文件 →
+> `python` 提取 token 落 `_tk.txt` → `TK=$(cat _tk.txt)`。
+
+### 🟡 医保报销（2026-10-02 提出，待用户拍板）
+- 现状：**系统 0 医保**。`bill` 无报销额/自付额、`payment_method` 无医保；
+  `drug` 无甲乙丙类（只有药理 `category`）；`patient` 无医保卡号/参保类型
+- 已给 3 方案：**A** 演示级最小闭环 / **B** 甲乙丙类 + 起付线（含金量最高）/ **C** 只写进论文零代码
+- ⚠️ 关键权衡：**做 B 会牵动论文**（功能列表 + ER 图 + 可能第 4/5 章）
+- 用户回复"这个你先给方案"，尚未选定
 
 ### 待处理
 - 🟡 **论文 5.1 措辞**（第464行）：现写"**集成测试**表明，35 并发请求抢 30 号源时，成功 30 次、拒绝 5 次"

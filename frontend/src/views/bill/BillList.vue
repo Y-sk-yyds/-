@@ -4,11 +4,15 @@
     - 页面用途：管理账单创建和费用收取，属于诊所收费收银流程。
     - 角色要求：收银员(CASHIER)为主要操作角色，负责账单生成和收费结算。
     - 核心功能：
-      1. 账单列表：展示账单号、挂号ID、挂号费、药费、总金额、支付方式、状态
+      1. 账单列表：展示账单号、挂号ID、费用类型、挂号费、药费、总金额、支付方式、状态
       2. 创建账单弹窗：输入挂号ID和处方ID生成账单
       3. 收费结算弹窗：选择支付方式（微信/支付宝/现金/银行卡）完成收款
       4. 支付方式映射：WECHAT/ALIPAY/CASH/CARD
-    - 费用计算：总金额 = 挂号费 + 药费（后端自动计算）
+    - 费用构成：一次挂号会产生两张独立账单 ——
+      「挂号费单」（挂号时生成，prescription_id 为空，只有挂号费）
+      与「药费单」（医生开方后生成，只有药费）。二者支付状态互不影响，
+      因此患者先缴挂号费后，开方追加药费不会出现"已支付却多出药费"的问题。
+      历史数据里可能仍存在挂号费与药费合在一张的"挂号费+药费"混合单。
   -->
   <div class="page-card">
     <!-- 页面工具栏 -->
@@ -41,6 +45,12 @@
     <el-table :data="tableData" border v-loading="loading" empty-text="暂无账单">
       <el-table-column prop="id" label="账单号" width="80" align="center" />
       <el-table-column prop="registrationId" label="挂号ID" width="80" align="center" />
+      <!-- 费用类型：由金额字段推导，区分"挂号费单 / 药费单 / 历史混合单" -->
+      <el-table-column label="费用类型" width="120" align="center">
+        <template #default="{ row }">
+          <el-tag :type="feeTypeTag(row)" size="small" effect="plain">{{ feeTypeLabel(row) }}</el-tag>
+        </template>
+      </el-table-column>
       <!-- 挂号费 -->
       <el-table-column label="挂号费" width="100" align="right">
         <template #default="{ row }">¥{{ row.registrationFee }}</template>
@@ -117,7 +127,7 @@
       <!-- 金额展示区 -->
       <div style="text-align:center;margin-bottom:20px">
         <div style="font-size:28px;font-weight:700;color:#E74C3C">¥{{ currentBill?.totalAmount }}</div>
-        <div style="font-size:13px;color:#999;margin-top:4px">挂号费 ¥{{ currentBill?.registrationFee }} + 药费 ¥{{ currentBill?.drugFee }}</div>
+        <div style="font-size:13px;color:#999;margin-top:4px">{{ feeDetail(currentBill) }}</div>
       </div>
       <!-- 支付方式选择：纵向排列的radio按钮 -->
       <el-radio-group v-model="payMethod" class="pay-methods">
@@ -182,6 +192,38 @@ const rules = {
  */
 function payLabel(v) { const m = { WECHAT: '微信', ALIPAY: '支付宝', CASH: '现金', CARD: '银行卡' }; return m[v] || '-' }
 function payType(v) { const m = { WECHAT: '', ALIPAY: 'primary', CASH: 'warning', CARD: 'info' }; return m[v] || '' }
+
+/**
+ * feeTypeLabel / feeTypeTag / feeDetail —— 费用类型推导
+ *
+ * 后端未新增数据库列，费用类型由金额字段推导：
+ *   只有挂号费（drugFee = 0）        -> 挂号费单   （挂号时生成）
+ *   只有药费（registrationFee = 0）  -> 药费单     （医生开方后生成）
+ *   两者都有                         -> 历史混合单 （改造前的旧数据）
+ */
+function feeTypeLabel(row) {
+  const reg = Number(row?.registrationFee || 0) > 0
+  const drug = Number(row?.drugFee || 0) > 0
+  if (reg && drug) return '挂号费+药费'
+  if (drug) return '药费'
+  return '挂号费'
+}
+function feeTypeTag(row) {
+  const reg = Number(row?.registrationFee || 0) > 0
+  const drug = Number(row?.drugFee || 0) > 0
+  if (reg && drug) return 'info'
+  if (drug) return 'warning'
+  return 'primary'
+}
+/** 收费弹窗里的费用明细文案，避免出现"挂号费 ¥0 + 药费 ¥120"这类怪句子 */
+function feeDetail(b) {
+  if (!b) return ''
+  const reg = Number(b.registrationFee || 0)
+  const drug = Number(b.drugFee || 0)
+  if (reg > 0 && drug > 0) return `挂号费 ¥${reg} + 药费 ¥${drug}`
+  if (drug > 0) return `药费 ¥${drug}`
+  return `挂号费 ¥${reg}`
+}
 
 /**
  * fetchData - 获取账单列表

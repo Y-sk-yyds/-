@@ -145,7 +145,8 @@ public class RegistrationController {
         Long scheduleId = body.get("scheduleId");
         // 委托 RegistrationService 执行挂号逻辑（含号源校验和扣减）
         Registration reg = registrationService.createRegistration(patientId, scheduleId);
-        billService.createBill(reg.getId(), null);
+        // 挂号费单：挂号即生成待缴账单（药费单待医生开方后另建）
+        billService.createRegistrationBill(reg.getId());
         return Result.ok(reg);
     }
 

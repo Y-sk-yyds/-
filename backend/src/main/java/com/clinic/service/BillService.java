@@ -85,59 +85,146 @@ public class BillService extends ServiceImpl<BillMapper, Bill> {
     }
 
     /**
-     * 创建账单
-     * <p>
-     * 业务执行流程：
-     * <ol>
-     *   <li>查询挂号记录，获取就诊基本信息</li>
-     *   <li>按出诊医生定价确定挂号费：挂号 → 排班 → 医生 → registration_fee</li>
-     *   <li>如果有处方，查询处方关联的所有药品明细，
-     *       累加计算药品费用：∑(药品单价 × 数量)</li>
-     *   <li>总金额 = 挂号费 + 药品费</li>
-     *   <li>保存账单记录，状态设为 0（待支付）</li>
-     * </ol>
-     * </p>
+     * 创建账单（兼容入口，按阶段自动分流）
+     *
+     * <p><b>为什么要分流：</b>挂号费在挂号那一刻就要缴清，药费要等医生开完处方才产生。
+     * 若两者混在同一张账单里，患者先付掉挂号费后，开方时把药费追加进来，
+     * 账单金额变了但状态仍是"已支付"——药费会被白送。因此拆成两张独立的账单。</p>
+     *
+     * <ul>
+     *   <li>{@code prescriptionId == null} —— 挂号阶段，走 {@link #createRegistrationBill(Long)}</li>
+     *   <li>{@code prescriptionId != null} —— 开方阶段，走 {@link #createDrugBill(Long, Long)}</li>
+     * </ul>
      *
      * @param registrationId 挂号记录ID
-     * @param prescriptionId 处方ID（可选，纯挂号无处方时可传 null）
-     * @return 创建的账单记录
+     * @param prescriptionId 处方ID（纯挂号无处方时传 null）
+     * @return 创建或复用的账单记录
      */
     @Transactional
     public Bill createBill(Long registrationId, Long prescriptionId) {
-        // 挂号时已生成账单，开处方时更新已有账单加药费
-        Bill bill = getOne(new LambdaQueryWrapper<Bill>().eq(Bill::getRegistrationId, registrationId));
-        boolean exists = bill != null;
-        if (!exists) {
+        return prescriptionId == null
+                ? createRegistrationBill(registrationId)
+                : createDrugBill(registrationId, prescriptionId);
+    }
+
+    /**
+     * 创建/复用「挂号费单」
+     *
+     * <p>挂号费单的识别方式：{@code registration_id = 本次挂号} 且
+     * {@code prescription_id IS NULL}。挂号费在挂号那一刻按出诊医生定价固化写入，
+     * 此后医生调价不影响本账单。</p>
+     *
+     * <p>同一挂号只会有一张挂号费单：重复调用（如重复提交）直接复用已有记录，
+     * 不会重复计费。</p>
+     *
+     * @param registrationId 挂号记录ID
+     * @return 挂号费单（新建或已存在的）
+     */
+    @Transactional
+    public Bill createRegistrationBill(Long registrationId) {
+        // 同一挂号只应存在一张挂号费单（prescription_id 为 NULL 的那张）
+        // 第二个参数 false：即使历史数据异常出现多条也不抛异常
+        Bill bill = getOne(new LambdaQueryWrapper<Bill>()
+                .eq(Bill::getRegistrationId, registrationId)
+                .isNull(Bill::getPrescriptionId), false);
+        if (bill != null) {
+            return bill;
+        }
+
+        bill = new Bill();
+        bill.setRegistrationId(registrationId);
+        // 挂号费按出诊医生的定价确定，在挂号那一刻固化写入账单。
+        // 此后医生调价不影响本账单，保证患者按挂号当时的价格结算。
+        bill.setRegistrationFee(resolveRegistrationFee(registrationId));
+        bill.setDrugFee(BigDecimal.ZERO);          // 挂号阶段还没有药费
+        bill.setTotalAmount(bill.getRegistrationFee());
+        bill.setStatus(0);                          // 0 = 待支付
+
+        save(bill);
+        return bill;
+    }
+
+    /**
+     * 创建/更新「药费单」
+     *
+     * <p>药费单的识别方式：{@code registration_id = 本次挂号} 且
+     * {@code prescription_id = 本次处方}。药费单的 {@code registration_fee} 恒为 0，
+     * 总金额只等于药费——挂号费绝不混入本单，因此挂号费的支付状态与药费互不影响。</p>
+     *
+     * @param registrationId 挂号记录ID
+     * @param prescriptionId 处方ID（必填）
+     * @return 药费单（新建或更新后的）
+     */
+    @Transactional
+    public Bill createDrugBill(Long registrationId, Long prescriptionId) {
+        Bill bill = getOne(new LambdaQueryWrapper<Bill>()
+                .eq(Bill::getRegistrationId, registrationId)
+                .eq(Bill::getPrescriptionId, prescriptionId), false);
+
+        // 药费单已收费则不再改金额（防止处方重复提交导致金额漂移）
+        if (bill != null && bill.getStatus() != null && bill.getStatus() == 1) {
+            return bill;
+        }
+
+        BigDecimal drugFee = calcDrugFee(prescriptionId);
+
+        if (bill == null) {
             bill = new Bill();
             bill.setRegistrationId(registrationId);
-            // 挂号费按出诊医生的定价确定，在挂号那一刻固化写入账单。
-            // 此后医生调价不影响本账单，保证患者按挂号当时的价格结算。
-            bill.setRegistrationFee(resolveRegistrationFee(registrationId));
+            bill.setPrescriptionId(prescriptionId);
+            bill.setRegistrationFee(BigDecimal.ZERO);   // 药费单不含挂号费
             bill.setStatus(0);
         }
 
-        bill.setPrescriptionId(prescriptionId);
-
-        // ===== 计算药费 =====
-        BigDecimal drugFee = BigDecimal.ZERO;
-        if (prescriptionId != null) {
-            List<PrescriptionDrug> items = prescriptionDrugMapper.selectList(
-                    new LambdaQueryWrapper<PrescriptionDrug>().eq(PrescriptionDrug::getPrescriptionId, prescriptionId));
-            for (PrescriptionDrug item : items) {
-                Drug drug = drugService.getById(item.getDrugId());
-                drugFee = drugFee.add(drug.getUnitPrice().multiply(BigDecimal.valueOf(item.getQuantity())));
-            }
-        }
         bill.setDrugFee(drugFee);
-
-        // ===== 计算总金额 =====
-        // 总金额 = 挂号费 + 药品费
-        bill.setTotalAmount(bill.getRegistrationFee().add(drugFee));
-
-        // 已存在则更新，不存在则插入
+        bill.setTotalAmount(drugFee);                   // 总金额 = 药费（不含挂号费）
         saveOrUpdate(bill);
-
         return bill;
+    }
+
+    /**
+     * 计算某张处方的药费合计：∑(药品单价 × 数量)
+     *
+     * @param prescriptionId 处方ID
+     * @return 药费合计（元），无明细时为 0
+     */
+    private BigDecimal calcDrugFee(Long prescriptionId) {
+        BigDecimal drugFee = BigDecimal.ZERO;
+        if (prescriptionId == null) {
+            return drugFee;
+        }
+        List<PrescriptionDrug> items = prescriptionDrugMapper.selectList(
+                new LambdaQueryWrapper<PrescriptionDrug>().eq(PrescriptionDrug::getPrescriptionId, prescriptionId));
+        for (PrescriptionDrug item : items) {
+            Drug drug = drugService.getById(item.getDrugId());
+            if (drug == null || drug.getUnitPrice() == null || item.getQuantity() == null) {
+                continue;
+            }
+            drugFee = drugFee.add(drug.getUnitPrice().multiply(BigDecimal.valueOf(item.getQuantity())));
+        }
+        return drugFee;
+    }
+
+    /**
+     * 推断账单的费用类型（不依赖额外的数据库列，由金额字段推导）
+     *
+     * <ul>
+     *   <li>{@code REGISTRATION} —— 挂号费单（只有挂号费，药费为 0）</li>
+     *   <li>{@code DRUG} —— 药费单（只有药费，挂号费为 0）</li>
+     *   <li>{@code MIXED} —— 混合单（历史数据：挂号费与药费在同一笔账单里）</li>
+     * </ul>
+     *
+     * @param bill 账单
+     * @return 费用类型代码
+     */
+    public static String resolveFeeType(Bill bill) {
+        boolean hasRegistration = bill.getRegistrationFee() != null
+                && bill.getRegistrationFee().compareTo(BigDecimal.ZERO) > 0;
+        boolean hasDrug = bill.getDrugFee() != null
+                && bill.getDrugFee().compareTo(BigDecimal.ZERO) > 0;
+        if (hasRegistration && hasDrug) return "MIXED";
+        if (hasDrug) return "DRUG";
+        return "REGISTRATION";
     }
 
     /**

@@ -158,11 +158,11 @@ public class PrescriptionController {
         // 委托 PrescriptionService 创建处方，包含处方明细的保存
         Prescription prescription = prescriptionService.createPrescription(request);
 
-        // 处方开具后自动生成账单，将处方费用纳入收费流程
+        // 处方开具后自动生成「药费单」，将药品费用纳入收费流程
+        // 注意：药费单与挂号费单是两张独立账单，各自的支付状态互不影响
         Consultation consultation = consultationService.getById(prescription.getConsultationId());
         if (consultation != null && consultation.getRegistrationId() != null) {
-            // 根据挂号ID和处方ID自动创建账单
-            billService.createBill(consultation.getRegistrationId(), prescription.getId());
+            billService.createDrugBill(consultation.getRegistrationId(), prescription.getId());
         }
 
         return Result.ok(prescription);
