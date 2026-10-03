@@ -75,6 +75,18 @@ public class DrugExpiryScheduler {
     public static final int NEAR_EXPIRY_DAYS = 30;
 
     /**
+     * 效期预警提前量（月）。
+     *
+     * <p>距有效期不足该月数的药品<b>仍可正常开具</b>，但医生开方界面会给出黄色提示
+     * 「还有 X 天过期」，由医生自行判断是否使用。</p>
+     *
+     * <p>与 {@link #NEAR_EXPIRY_DAYS} 构成两级管控：<b>预警线只提示、不禁用；
+     * 下架线才真正停用</b>。阈值统一由本类持有并在 {@code DrugService} 中复用，
+     * 前端不重复定义数字。</p>
+     */
+    public static final int EXPIRY_WARN_MONTHS = 3;
+
+    /**
      * 扫描并自动下架已过期药品
      *
      * <p>执行流程：</p>

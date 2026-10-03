@@ -86,12 +86,16 @@
         -->
         <div v-for="(item, idx) in form.drugs" :key="idx" class="drug-row">
           <el-select v-model="item.drugId" placeholder="药品" filterable style="width:160px">
-            <el-option v-for="d in drugList" :key="d.id" :label="`${d.name} (¥${d.unitPrice})`" :value="d.id" />
+            <el-option v-for="d in availableDrugs" :key="d.id" :label="drugLabel(d)" :value="d.id" />
           </el-select>
           <el-input-number v-model="item.quantity" :min="1" :max="99" size="small" style="width:100px" />
           <span class="drug-unit">{{ item.unit || '盒' }}</span>
           <el-input v-model="item.usageMethod" placeholder="用法" style="width:80px" />
           <el-input v-model="item.dosage" placeholder="用量" style="width:80px" />
+          <!-- 临期预警：距有效期不足 3 个月的药品可开具，但需让医生知悉剩余天数 -->
+          <el-tag v-if="drugExpiryTag(item.drugId)" type="warning" size="small" effect="light" class="expiry-warn">
+            {{ drugExpiryTag(item.drugId) }}
+          </el-tag>
           <el-button text type="danger" @click="form.drugs.splice(idx, 1)" :disabled="form.drugs.length <= 1">✕</el-button>
         </div>
 
@@ -110,10 +114,10 @@
 
 <script setup>
 // -- 核心导入 --
-import { ref, reactive, onMounted } from 'vue'        // Vue 3 API
-import { ElMessage } from 'element-plus'               // Element Plus消息
-import { Plus } from '@element-plus/icons-vue'          // 图标
-import { prescriptionApi, drugApi } from '@/api'       // 处方API + 药品API
+import { ref, reactive, computed, onMounted } from 'vue'   // Vue 3 API
+import { ElMessage, ElMessageBox } from 'element-plus'      // Element Plus 消息 / 确认框
+import { Plus } from '@element-plus/icons-vue'              // 图标
+import { prescriptionApi, drugApi } from '@/api'            // 处方API + 药品API
 
 // -- 表格状态 --
 const loading = ref(false)       // 表格loading
@@ -170,6 +174,37 @@ async function loadDrugs() {
   drugList.value = res.data.records
 }
 
+/**
+ * 下拉可选药品：只列「在用」(status=1)。
+ * 已下架药品（status=0，含近效期被自动下架的）后端会拒绝开具，
+ * 不应出现在选项里，避免医生选完才被拦下。
+ */
+const availableDrugs = computed(() => drugList.value.filter(d => d.status === 1))
+
+/**
+ * 药品下拉文案：临期药品（剩余不足 3 个月）追加剩余天数提示。
+ * 级别与剩余天数均由后端下发（Drug.expiryLevel / daysToExpire），前端不自行判断阈值。
+ */
+function drugLabel(d) {
+  const base = `${d.name} (¥${d.unitPrice})`
+  if (d.expiryLevel === 'WARN' && d.daysToExpire != null) {
+    return `${base} ⚠️ 还有 ${d.daysToExpire} 天过期`
+  }
+  return base
+}
+
+/** 已选药品的临期提示文案（仅 WARN 级别提示；近效期/已过期已被下架禁止，不会出现在可选列表） */
+function drugExpiryTag(drugId) {
+  const d = drugList.value.find(x => x.id === drugId)
+  if (!d || d.expiryLevel !== 'WARN' || d.daysToExpire == null) return ''
+  return `还有 ${d.daysToExpire} 天过期`
+}
+
+/** 本次处方中包含的「临期预警」药品，用于提交前二次确认 */
+const nearExpiryDrugs = computed(() => form.drugs
+  .map(it => drugList.value.find(d => d.id === it.drugId))
+  .filter(d => d && d.expiryLevel === 'WARN'))
+
 function formatTime(row, column, value) {
   if (!value) return '-'
   if (Array.isArray(value)) {
@@ -210,6 +245,17 @@ function openCreate() {
 async function handleSave() {
   const valid = await formRef.value.validate().catch(() => false)
   if (!valid) return
+  // 临期药品二次确认：允许开具，但必须让医生明确知悉剩余效期
+  if (nearExpiryDrugs.value.length) {
+    const detail = nearExpiryDrugs.value
+      .map(d => `${d.name}（还有 ${d.daysToExpire} 天过期）`).join('、')
+    const ok = await ElMessageBox.confirm(
+      `本次处方含临近有效期药品：${detail}，是否确认开具？`,
+      '效期提醒',
+      { confirmButtonText: '仍然开具', cancelButtonText: '返回修改', type: 'warning' }
+    ).then(() => true).catch(() => false)
+    if (!ok) return
+  }
   saving.value = true
   try {
     const user = JSON.parse(localStorage.getItem('user'))
@@ -230,4 +276,6 @@ onMounted(() => { loadDrugs(); fetchData() })
 .drug-row { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; }
 /* 单位文字样式 */
 .drug-unit { font-size: 12px; color: #909399; min-width: 20px; }
+/* 药品明细行内的临期预警标签：固定宽度不参与伸缩，避免被输入框挤变形 */
+.expiry-warn { flex-shrink: 0; }
 </style>

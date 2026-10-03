@@ -76,7 +76,9 @@
 - 2026-09-30 收敛前曾并存 `init.sql`(基础版) + `init_full.sql`(完整版) 两个文件，**已合并为一个**；`patch_v2_doctor_fee_drug_expiry.sql` 与 `sql/backup/` 已删除
 - **init.sql 结构已核验与实体/线上库逐列一致**（2026-10-02）：13 表 / 133 列，DDL↔`information_schema` 13/13 完全一致，13 个实体零缺列。P8 的 3 个新列（`doctor.registration_fee`、`drug.produce_date`、`drug.expire_date`）**已在 init.sql 内**，分级定价与效期分布都用 `UPDATE ... WHERE` 补（相对日期，任何时候初始化分布相同）；**分单结算 / 挂号即缴费未加任何列**（靠 `bill.prescription_id` 判单据类型）。init.sql 由「基础种子（无 id 自增）+ 扩展种子（显式 id 从 N+1 接编）」两段组成，**无 DELETE**
 - **演示/验收前先跑 `reset.bat`**：线上库会因手动测试变脏（2026-10-02 曾多出 7 条张三的 10-02 挂号 + 1 个测试药品 `wqeq`，而 init.sql 是 109 挂号 / 12 药品）
+- **药品效期种子分布（2026-10-03 起，含 2 个 WARN 档供演示）**：`tools/init_template.sql` 用相对日期 `UPDATE` 保证任何时候初始化分布一致 —— **7 NORMAL / 2 WARN（阿莫西林 +45、布洛芬 +60 天，开方下拉带黄标）/ 2 NEAR（蒙脱石散 +20、奥美拉唑 +25）/ 1 EXPIRED（氯雷他定 −46）**。⚠️ `reset.bat` 重建后 `drug.status` **全为 1**，必须**重启后端**（`ApplicationReadyEvent` 补偿扫描）才会把 3 个 NEAR/EXPIRED 下架 —— **重建库 ≠ 已下架**。生成器需 `pycryptodome`，系统 python 没有，用 `~/.workbuddy/binaries/python/envs/default/Scripts/python.exe`
 - 每次改后端代码需重启(IDE热更新不覆盖SQL/XML等)
+- **药品临期提醒（2026-10-03）**：两级效期管控 —— 下架/禁开线 `NEAR_EXPIRY_DAYS=30`、预警线 `EXPIRY_WARN_MONTHS=3`（31~90 天可开+提示），阈值只在 `DrugExpiryScheduler` 一处；`DrugService.fillExpiryInfo()` 换算 `daysToExpire`/`expiryLevel`（EXPIRED/NEAR/WARN/NORMAL/UNKNOWN）下发，前端 `PrescriptionList.vue` 纯展示（下拉文案 + 行内黄 tag + 提交二次确认）。**零数据库列**
 - PrescriptionService ↔ BillService 存在循环依赖风险，涉及账单的操作放 Controller 层
 - AES 加密: key=32字节(AES-256), IV="ClinicSystem-IV-", CBC模式
 - AES 密钥变更历史: 初始 `clinic-aes-key-32bytes-secret!!`(AES-128) → 当前 `clinic-aes-secret-key-for-256bit`(AES-256)
@@ -119,7 +121,14 @@
   - 约定②：挂号费**按医生分别定价**（`doctor.registration_fee`，梯度 10.00~50.00）——2026-09-30 起由"统一 10.00"升级。张50/陈45(主任) 赵35/孙30/李25(副主任) 王20/刘15/周10(主治)
   - 约定③：病历 content 密文 = AES-256-CBC(key=`clinic-aes-secret-key-for-256bit`, IV=`ClinicSystem-IV-`, PKCS7, Base64)
   - 约定④：号源 remain_num 由 SQL 统一重算 `total_num - 有效挂号数(status<>0)`，禁止手算
-  - 约定⑤：**药品效期语义（2026-09-30 改为「近效期即下架」）** `expire_date <= CURDATE() + 30 天` 即视为近效期，自动下架 + 禁止开具；"有效期至 X"当天仍完整有效。`DrugExpiryScheduler.NEAR_EXPIRY_DAYS = 30` 被**调度器 / 工作台 / 处方校验三处共用**，改阈值须三处联动；两列**必须允许 NULL**（DrugStockLockTest 运行时 insert 不带日期）
+  - 约定⑤：**药品效期两级管控（2026-10-03 起，两条线互不干扰）**
+    * **下架/禁开线 30 天**：`expire_date <= CURDATE() + 30 天` 视为近效期 → 自动下架 + 禁止开具（"有效期至 X"当天仍有效）。
+      `DrugExpiryScheduler.NEAR_EXPIRY_DAYS = 30` 被**调度器 / 工作台 / 处方校验三处共用**，改阈值须三处联动
+    * **预警线 3 个月（2026-10-03 新增）**：`EXPIRY_WARN_MONTHS = 3`，剩余不足 3 个月但已超 30 天的药品
+      **仍可开具**，只在医生开方界面黄色提示「还有 X 天过期」+ 提交前二次确认
+    * 阈值统一由 `DrugExpiryScheduler` 持有，`DrugService.fillExpiryInfo()` 换算成 `daysToExpire` / `expiryLevel`
+      （EXPIRED / NEAR / WARN / NORMAL / UNKNOWN）下发，**前端不自行判断阈值**、**未加数据库列**（均为 `@TableField(exist=false)` 瞬态字段）
+    * 两列**必须允许 NULL**（DrugStockLockTest 运行时 insert 不带日期）
   - 约定⑥：药品 `status` 1 在用 / 0 已下架；药品列表 **默认查全部**（不传 status 查全部），否则自动下架后管理员看不见无法处理
   - 约定⑦：**排班 2（张医生今日下午）是集成测试夹具**——`total_num=30`、2 条有效挂号 → `remain_num=28`。`TODAY_PLAN` 禁止再向排班 2 追加挂号（2026-09-30 已移除 `(1,"PM",[1,1])`，挂号 111→109）
   - 新增登录账号 doctor03~doctor08，密码同 admin123
@@ -327,12 +336,12 @@ Vite 编译 HTTP 200，标记 `payMethod`×7 / `payAmount`×5 / `cancelPay`×3 /
 > 污染**（拿到假 token → 403 白排查）。正确姿势：登录响应重定向到文件 →
 > `python` 提取 token 落 `_tk.txt` → `TK=$(cat _tk.txt)`。
 
-### 🟡 医保报销（2026-10-02 提出，待用户拍板）
-- 现状：**系统 0 医保**。`bill` 无报销额/自付额、`payment_method` 无医保；
-  `drug` 无甲乙丙类（只有药理 `category`）；`patient` 无医保卡号/参保类型
-- 已给 3 方案：**A** 演示级最小闭环 / **B** 甲乙丙类 + 起付线（含金量最高）/ **C** 只写进论文零代码
-- ⚠️ 关键权衡：**做 B 会牵动论文**（功能列表 + ER 图 + 可能第 4/5 章）
-- 用户回复"这个你先给方案"，尚未选定
+### ❌ 医保报销：已决定**不做**（2026-10-03 用户拍板）
+- 用户表态："不用做医保方向了，目前这样的逻辑正确就可以了。"
+- 系统保持 **0 医保**：`bill` 无报销额/自付额、`payment_method` 无医保；
+  `drug` 无甲乙丙类；`patient` 无医保卡号/参保类型 —— **均不加字段，保持现状**
+- 曾给 3 方案（A 演示级最小闭环 / B 甲乙丙类+起付线 / C 只写论文零代码），**全部弃用**
+- 答辩若被问医保，话术：本系统按**自费结算**设计，医保对接属院端 HIS / 医保局接口范畴，不在本系统范围
 
 ### 待处理
 - 🟡 **论文 5.1 措辞**（第464行）：现写"**集成测试**表明，35 并发请求抢 30 号源时，成功 30 次、拒绝 5 次"

@@ -160,4 +160,29 @@ public class Drug extends BaseEntity {
      */
     @TableField(exist = false)
     private Integer warningThreshold;
+
+    /**
+     * 距有效期剩余天数（非数据库字段）
+     *
+     * <p>由 {@code DrugService.pageQuery()} 依据 {@link #expireDate} 与当前日期实时计算，
+     * 供前端直接展示，避免前后端各写一套效期阈值。未登记效期的药品为 {@code null}；
+     * 已过期则为负数。</p>
+     */
+    @TableField(exist = false)
+    private Long daysToExpire;
+
+    /**
+     * 效期预警级别（非数据库字段）
+     *
+     * <p>与 {@link #daysToExpire} 一同由服务层计算下发，取值：</p>
+     * <ul>
+     *   <li>{@code EXPIRED} —— 已过期（剩余 &lt; 0 天）</li>
+     *   <li>{@code NEAR} —— 近效期（剩余 ≤ 30 天），已自动下架、禁止开具</li>
+     *   <li>{@code WARN} —— 临期预警（剩余不足 3 个月），<b>可开具但需提醒医生</b></li>
+     *   <li>{@code NORMAL} —— 正常</li>
+     *   <li>{@code UNKNOWN} —— 未登记有效期</li>
+     * </ul>
+     */
+    @TableField(exist = false)
+    private String expiryLevel;
 }

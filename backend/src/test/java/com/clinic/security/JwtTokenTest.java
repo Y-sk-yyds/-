@@ -60,7 +60,7 @@ class JwtTokenTest {
             // 设过期时间为 1 毫秒，现在生成的 token 立即过期
             expField.setLong(jwtTokenProvider, 1);
             String token = jwtTokenProvider.generateToken(3L, "test", "DOCTOR");
-            Thread.sleep(10); // 等 token 过期
+            Thread.sleep(100); // 等 token 过期
             assertFalse(jwtTokenProvider.validateToken(token), "过期令牌应被拒绝");
         } finally {
             expField.setLong(jwtTokenProvider, originalExp);

@@ -12,6 +12,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -100,10 +102,51 @@ public class DrugService extends ServiceImpl<DrugMapper, Drug> {
                     drug.setCurrentStock(stock.getCurrentStock());         // 当前库存量
                     drug.setWarningThreshold(stock.getWarningThreshold()); // 库存预警阈值
                 }
+                // 效期派生字段：剩余天数 + 预警级别（阈值统一取 DrugExpiryScheduler 的常量）
+                fillExpiryInfo(drug);
             });
         }
 
         return result;
+    }
+
+    /**
+     * 填充药品的效期派生字段（剩余天数 / 预警级别）。
+     *
+     * <p>阈值全部取自 {@link DrugExpiryScheduler}，本方法不另设数字，保证
+     * 「定时任务自动下架 / 工作台效期待办 / 开方界面临期提醒」三处口径一致。</p>
+     *
+     * <table border="1">
+     *   <tr><th>级别</th><th>条件</th><th>前端表现</th></tr>
+     *   <tr><td>{@code EXPIRED}</td><td>剩余 &lt; 0 天</td><td>已下架，禁止开具</td></tr>
+     *   <tr><td>{@code NEAR}</td><td>剩余 ≤ 30 天</td><td>已下架，禁止开具</td></tr>
+     *   <tr><td>{@code WARN}</td><td>剩余不足 3 个月</td><td><b>可开具</b>，黄色提示剩余天数</td></tr>
+     *   <tr><td>{@code NORMAL}</td><td>剩余 ≥ 3 个月</td><td>正常</td></tr>
+     *   <tr><td>{@code UNKNOWN}</td><td>未登记有效期</td><td>不提示</td></tr>
+     * </table>
+     *
+     * @param drug 待填充的药品实体
+     */
+    private void fillExpiryInfo(Drug drug) {
+        LocalDate expire = drug.getExpireDate();
+        if (expire == null) {
+            // 未登记效期的药品不参与效期判断，级别置为 UNKNOWN
+            drug.setExpiryLevel("UNKNOWN");
+            return;
+        }
+        LocalDate today = LocalDate.now();
+        long days = ChronoUnit.DAYS.between(today, expire);
+        drug.setDaysToExpire(days);
+
+        if (days < 0) {
+            drug.setExpiryLevel("EXPIRED");   // 已过期：下架 + 禁开
+        } else if (days <= DrugExpiryScheduler.NEAR_EXPIRY_DAYS) {
+            drug.setExpiryLevel("NEAR");      // 近效期：下架 + 禁开
+        } else if (!expire.isAfter(today.plusMonths(DrugExpiryScheduler.EXPIRY_WARN_MONTHS))) {
+            drug.setExpiryLevel("WARN");      // 临期预警：可开 + 提醒医生
+        } else {
+            drug.setExpiryLevel("NORMAL");
+        }
     }
 
     /**

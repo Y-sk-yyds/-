@@ -273,6 +273,10 @@ docker-compose logs -f backend      # 查看后端日志
 | P7 | 移动端患者服务（H5 手机网页，3页面，免登录） | ✅ 完成 |
 | P8 | 挂号费按医生分级定价 + 药品效期(生产/过期日期)与过期自动下架 | ✅ 完成并实测通过 |
 | P9 | 移动端体验：排班页科室分类+搜索、就诊页按日期分区、排队看板分天分组 | ✅ 完成并实测通过 |
+| P10 | 就诊页：排队看板聚焦当天 + 历史记录折叠 3 笔 | ✅ 完成并实测通过 |
+| P11 | 账单分单结算（挂号费单 / 药费单，靠 `bill.prescription_id` 区分，零表结构变更） | ✅ 完成并实测通过 |
+| P12 | 移动端挂号「先缴费、后挂号」一次调用闭环（PC 端不改） | ✅ 完成并实测通过 |
+| P13 | 处方开方药品临期提醒（3 个月 WARN 预警线 + 种子补 2 个 WARN 药） | ✅ 完成并实测通过 |
 
 ## 八、移动端患者服务
 
@@ -344,11 +348,16 @@ docker-compose logs -f backend      # 查看后端日志
 
 - **AES 密钥**：论文描述的 AES-256-CBC（key 32 字节、IV `ClinicSystem-IV-`）必须与 `application.yml` 的 `aes.secret-key` 一致；换密钥后 `sql/init.sql` 里的病历密文**必须重新加密**，否则病历解密全挂。密文由 `gen_init_full.py`（读 `tools/init_template.sql`）在生成时加密，密钥常量在同一文件顶部
 - **挂号费**：已由固定 10 元改为**按医生定价**（`doctor.registration_fee`，梯度 10.00~50.00）。`BillService.resolveRegistrationFee(registrationId)` 走「挂号→排班→医生」取价，取不到时兜底 `DEFAULT_REGISTRATION_FEE = 10.00`。论文若写"统一 10 元"需同步改为分级收费；药费按处方实价
-- **账单分单结算**：挂号费与药费拆成两张独立账单（详见「三、API 接口 – 账单管理 – ★ 账单分单结算」）。
-  移动端挂号成功后会**立即弹出缴费弹窗**（`MobileHome.vue` 的 `enterPayFlow`），
-  先缴挂号费；药费待医生开方后作为独立账单出现在「我的就诊 → 待缴费」。
-  PC 端 `BillList.vue` 用「费用类型」列区分两种单子
-- **药品效期**：`expire_date <= CURDATE() + 30 天` 即视为**近效期**并自动下架、禁止开具（"有效期至 X"当天仍完整有效）。`DrugExpiryScheduler.NEAR_EXPIRY_DAYS = 30` 被**调度器 / 工作台 / 处方校验三处共用**，改阈值须三处联动
+- **账单分单结算 + 移动端「先缴费、后挂号」**：挂号费与药费拆成两张独立账单（详见「三、API 接口 – 账单管理 – ★ 账单分单结算」）。
+  移动端挂号已改为**一次调用闭环**（`MobileHome.vue`「确认挂号并缴费」弹窗 → `POST /api/mobile/registrations` 带 `paymentMethod`）：
+  `createRegistration` → `createRegistrationBill` → `billService.pay` 三步串行，**任一步失败整体回退**（删账单 + 取消挂号，Redis 号源回补），库里不留"已挂号未缴费"中间态，返回 `paid=true`。
+  药费待医生开方后作为独立账单出现在「我的就诊 → 待缴费」。
+  PC 端 `BillList.vue` 用「费用类型」列区分两种单子；**PC 端挂号流程保持原样**（挂号 → 待收挂号费单 → 收银台收款），因 PC 患者登不进去
+- **药品效期（两级管控，2026-10-03 起）**：
+  - **下架/禁开线 30 天**：`expire_date <= CURDATE() + 30 天` 即视为**近效期**并自动下架、禁止开具（"有效期至 X"当天仍完整有效）。`DrugExpiryScheduler.NEAR_EXPIRY_DAYS = 30` 被**调度器 / 工作台 / 处方校验三处共用**，改阈值须三处联动
+  - **预警线 3 个月**：`DrugExpiryScheduler.EXPIRY_WARN_MONTHS = 3`，剩余不足 3 个月但已超 30 天的药品**可正常开具**，仅标记为 `WARN` 级别下发，开方界面 `PrescriptionList.vue` 黄色提示剩余天数并**在提交前二次确认**
+  - 阈值只由 `DrugExpiryScheduler` 一处持有，`DrugService.fillExpiryInfo()` 换算成 `daysToExpire` / `expiryLevel`（EXPIRED/NEAR/WARN/NORMAL/UNKNOWN）；这两个字段是 `Drug` 的 `@TableField(exist=false)` 瞬态字段，**未加数据库列**，前端不自行判断阈值
+  - **种子分布**（`tools/init_template.sql`，全部相对日期）：7 NORMAL / **2 WARN**（阿莫西林 +45 天、布洛芬 +60 天，供演示临期提醒）/ 2 NEAR（蒙脱石散 +20、奥美拉唑 +25）/ 1 EXPIRED（氯雷他定 −46）；⚠️ 重建库后必须**重启后端**才会自动下架 NEAR/EXPIRED
 - **药品录入必填**：`produce_date` 与 `expire_date` 为**接口层必填**（`DrugController.checkExpiryDates()`，新增/编辑都校验，不允许清空）。但 `drug` 表两列仍是 NULL 可空 —— 因为 `DrugStockLockTest.setUp()` 用 `drugMapper.insert()` 直插不带日期的药品，若改成 NOT NULL 会使该单元测试变红
 - **药品状态语义**：`status=1` 在用 / `0` 已下架。药品列表**默认查全部**（不做默认过滤），否则自动下架后管理员看不到、无法处理
 - **性能数据（★两套数字别混）**：论文第六章同时有两组并发数据，来源不同、都对，切勿互相"对齐"：

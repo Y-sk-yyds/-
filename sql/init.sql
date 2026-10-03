@@ -363,19 +363,21 @@ INSERT INTO `drug` (`name`, `specification`, `unit`, `unit_price`, `category`) V
 -- ------------------------------------------------------------
 -- 药品效期（生产日期 / 有效期至）
 -- 保质期统一按 2 年（730 天）计，采用相对日期
--- 以保证任何时候初始化数据库都有预期的「正常 / 临期 / 已过期」分布
+-- 以保证任何时候初始化数据库都有预期的「正常 / 预警 / 临期 / 已过期」分布
+-- 分级：>90 天 正常｜31~90 天 预警（可开具 + 提示）｜≤30 天 临期（下架禁开）｜<0 已过期（下架禁开）
 -- ------------------------------------------------------------
--- 正常在效期内
-UPDATE `drug` SET `produce_date` = DATE_ADD(CURDATE(), INTERVAL -190 DAY), `expire_date` = DATE_ADD(CURDATE(), INTERVAL  540 DAY) WHERE `name` = '阿莫西林胶囊';
+-- 正常在效期内（剩余 > 90 天）
 UPDATE `drug` SET `produce_date` = DATE_ADD(CURDATE(), INTERVAL -210 DAY), `expire_date` = DATE_ADD(CURDATE(), INTERVAL  520 DAY) WHERE `name` = '头孢克洛胶囊';
-UPDATE `drug` SET `produce_date` = DATE_ADD(CURDATE(), INTERVAL -230 DAY), `expire_date` = DATE_ADD(CURDATE(), INTERVAL  500 DAY) WHERE `name` = '布洛芬缓释胶囊';
 UPDATE `drug` SET `produce_date` = DATE_ADD(CURDATE(), INTERVAL -250 DAY), `expire_date` = DATE_ADD(CURDATE(), INTERVAL  480 DAY) WHERE `name` = '对乙酰氨基酚片';
 UPDATE `drug` SET `produce_date` = DATE_ADD(CURDATE(), INTERVAL -170 DAY), `expire_date` = DATE_ADD(CURDATE(), INTERVAL  560 DAY) WHERE `name` = '复方氨酚烷胺片';
 UPDATE `drug` SET `produce_date` = DATE_ADD(CURDATE(), INTERVAL -270 DAY), `expire_date` = DATE_ADD(CURDATE(), INTERVAL  460 DAY) WHERE `name` = '连花清瘟胶囊';
 UPDATE `drug` SET `produce_date` = DATE_ADD(CURDATE(), INTERVAL -130 DAY), `expire_date` = DATE_ADD(CURDATE(), INTERVAL  600 DAY) WHERE `name` = '维生素C片';
 UPDATE `drug` SET `produce_date` = DATE_ADD(CURDATE(), INTERVAL -300 DAY), `expire_date` = DATE_ADD(CURDATE(), INTERVAL  430 DAY) WHERE `name` = '硝苯地平控释片';
 UPDATE `drug` SET `produce_date` = DATE_ADD(CURDATE(), INTERVAL -150 DAY), `expire_date` = DATE_ADD(CURDATE(), INTERVAL  580 DAY) WHERE `name` = '盐酸二甲双胍片';
--- 临期（落入 30 天预警窗口）
+-- 预警（剩余 31~90 天：可正常开具，开方界面提示「还有 X 天过期」）——用于演示临期提醒
+UPDATE `drug` SET `produce_date` = DATE_ADD(CURDATE(), INTERVAL -685 DAY), `expire_date` = DATE_ADD(CURDATE(), INTERVAL   45 DAY) WHERE `name` = '阿莫西林胶囊';
+UPDATE `drug` SET `produce_date` = DATE_ADD(CURDATE(), INTERVAL -670 DAY), `expire_date` = DATE_ADD(CURDATE(), INTERVAL   60 DAY) WHERE `name` = '布洛芬缓释胶囊';
+-- 临期（剩余 ≤ 30 天，落入下架窗口）
 UPDATE `drug` SET `produce_date` = DATE_ADD(CURDATE(), INTERVAL -710 DAY), `expire_date` = DATE_ADD(CURDATE(), INTERVAL   20 DAY) WHERE `name` = '蒙脱石散';
 UPDATE `drug` SET `produce_date` = DATE_ADD(CURDATE(), INTERVAL -705 DAY), `expire_date` = DATE_ADD(CURDATE(), INTERVAL   25 DAY) WHERE `name` = '奥美拉唑肠溶胶囊';
 -- 已过期（后端启动时将被自动下架）
