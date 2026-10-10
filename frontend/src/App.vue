@@ -23,8 +23,33 @@
 </template>
 
 <script setup>
-// App.vue 为纯布局/样式容器，不包含业务逻辑
-// 所有全局状态（用户认证等）由 Pinia store 和路由守卫管理
+import { onMounted, onBeforeUnmount } from 'vue'
+
+/**
+ * 【弹窗打开时的页面抖动修复】
+ *
+ * 现象：点击卡片弹出 dialog 的瞬间，整页内容会横向"抖一下"。
+ * 原因：Element Plus 的弹窗打开时会锁 body 滚动（给 body 加 overflow:hidden），
+ *       桌面/安卓浏览器里滚动条是占宽度的，锁滚动后滚动条消失 →
+ *       可视区域变宽 → 整页内容重排 → 视觉抖动。
+ *
+ * 做法：锁滚动期间给 body 补一条与滚动条等宽的 padding-right，
+ *       让内容区宽度保持不变；关闭弹窗立即清掉。
+ *       （iOS Safari 滚动条是 overlay 的、本就不占宽度，gap 为 0 时直接不启用）
+ */
+onMounted(() => {
+  const gap = window.innerWidth - document.documentElement.clientWidth
+  if (gap <= 0) return   // 滚动条不占宽度 → 无需补偿，直接不启用
+
+  const observer = new MutationObserver(() => {
+    const locked = document.body.classList.contains('el-popup-parent--hidden')
+                || document.body.classList.contains('v-modal--hidden')
+    document.body.style.paddingRight = locked ? `${gap}px` : ''
+  })
+  observer.observe(document.body, { attributes: true, attributeFilter: ['class'] })
+
+  onBeforeUnmount(() => observer.disconnect())
+})
 </script>
 
 <style>

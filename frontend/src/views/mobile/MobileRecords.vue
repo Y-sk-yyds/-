@@ -6,11 +6,20 @@
 
     <!-- 手机号输入 -->
     <div class="phone-bar" v-if="!patient">
-      <el-input v-model="queryPhone" placeholder="请输入手机号" maxlength="11">
+      <!-- type="tel" + inputmode="numeric"：移动端弹数字键盘 -->
+      <el-input v-model="queryPhone" type="tel" inputmode="numeric" placeholder="请输入手机号" maxlength="11">
         <template #append>
           <el-button type="primary" :loading="loading" @click="loadData">查询</el-button>
         </template>
       </el-input>
+    </div>
+
+    <!-- 已识别患者：姓名 + 手机号 + 切换入口
+         （手机号不再走 URL 后必须给"换人"入口 —— 诊所有公用平板） -->
+    <div class="patient-bar" v-if="patient">
+      <span class="pb-name">{{ patient.name }}</span>
+      <span class="pb-phone">{{ phone }}</span>
+      <el-button size="small" text type="primary" @click="resetPatient">切换患者</el-button>
     </div>
 
     <!-- Tab 切换 -->
@@ -19,6 +28,15 @@
       <span :class="{ active: tab === 'queue' }" @click="tab = 'queue'">排队看板</span>
       <span :class="{ active: tab === 'records' }" @click="tab = 'records'">我的病历</span>
     </div>
+
+    <!-- 下拉刷新：排队看板与待缴费状态会变（医生开方、收银台收款都会影响），
+         手写 touch 三件套，与 MobileHome 同款实现，不引第三方组件 -->
+    <div class="pull-wrap" v-if="patient"
+         @touchstart="onPullStart" @touchmove="onPullMove" @touchend="onPullEnd">
+      <div class="pull-indicator" :style="{ height: pullDistance + 'px' }">
+        <span class="pull-arrow" :class="{ ready: canRelease }">↓</span>
+        <span>{{ canRelease ? '松开刷新' : '下拉刷新' }}</span>
+      </div>
 
     <!-- 我的挂号：按「待缴费 / 今日就诊 / 即将就诊 / 历史记录」分区 -->
     <div class="list-area" v-if="tab === 'registrations' && patient" v-loading="loading">
@@ -90,20 +108,22 @@
       </div>
     </div>
 
-    <!-- 我的病历 -->
+    <!-- 我的病历
+         ⚠️ medical_record.content 是 AES-256 密文，H5 免登录、仅凭手机号认身份，
+             任何人知道该手机号即可调用，故不下发/不渲染正文；
+             只展示 diagnosis —— 该字段后端就是明文存储，属于患者自己的就诊结论。 -->
     <div class="list-area" v-if="tab === 'records' && patient" v-loading="loading">
       <div class="record-card" v-for="r in records" :key="r.id">
         <div class="record-header">
           <span>{{ r.createTime?.slice(0, 10) }}</span>
-          <el-tag size="small">AES-256 加密</el-tag>
+          <el-tag size="small" type="info">就诊记录</el-tag>
         </div>
         <div class="record-diag" v-if="r.diagnosis">诊断：{{ r.diagnosis }}</div>
-        <div class="record-content" v-if="r.content">
-          {{ r.content?.length > 40 ? r.content.slice(0, 40) + '...' : r.content }}
-        </div>
+        <div class="record-tip" v-else>本条记录暂无诊断结论</div>
       </div>
       <div v-if="!loading && records.length === 0" class="empty-hint">暂无病历记录</div>
     </div>
+    </div><!-- /.pull-wrap -->
 
     <!-- 支付弹窗 -->
     <el-dialog v-model="showPay" title="确认支付" width="80%" top="20vh">
@@ -116,31 +136,35 @@
       </template>
     </el-dialog>
 
-    <!-- 底部导航 -->
-    <div class="bottom-nav">
-      <div class="nav-item" @click="$router.push('/mobile')">
-        <el-icon><List /></el-icon>
-        <span>排班挂号</span>
-      </div>
-      <div class="nav-item active">
-        <el-icon><Document /></el-icon>
-        <span>我的就诊</span>
-      </div>
-    </div>
+    <!-- 底部导航（公共组件） -->
+    <MobileNav current="records" />
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
-import { List, Document } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { mobileApi } from '@/api'
 import request from '@/utils/request'
+import MobileNav from './MobileNav.vue'
 
 const route = useRoute()
 const tab = ref('registrations')
-const queryPhone = ref(route.query.phone || '')
+/**
+ * 手机号来源优先级：sessionStorage（挂号成功跳转过来）> URL query（兼容外部深链）。
+ *
+ * 读入后**立即清除** sessionStorage —— 诊所有公用平板，留着会让下一个患者
+ * 打开页面就看到上一个患者的挂号与病历。代价是刷新本页要重新输入一次，
+ * 这个安全性交换是值得的。
+ */
+const cachedPhone = (() => {
+  const v = sessionStorage.getItem('clinic:patientPhone') || ''
+  if (v) sessionStorage.removeItem('clinic:patientPhone')
+  return v
+})()
+
+const queryPhone = ref(cachedPhone || route.query.phone || '')
 const phone = ref('')
 const patient = ref(null)
 const loading = ref(false)
@@ -231,6 +255,58 @@ const loadData = async () => {
   finally { loading.value = false }
 }
 
+/* ===== 下拉刷新（与 MobileHome 同款实现） =====
+   阻尼 0.4、阈值 60px、上限 100px；只有「页面顶部 + 手指向下」才接管手势
+   并 preventDefault，delta≤0 立即释放方向锁定，否则会卡住页面上滑。 */
+const PULL_THRESHOLD = 60
+const PULL_MAX = 100
+const pullDistance = ref(0)
+const refreshing = ref(false)
+let pulling = false
+let startY = 0
+
+const canRelease = computed(() => pullDistance.value >= PULL_THRESHOLD)
+
+const onPullStart = (e) => {
+  if (refreshing.value || !patient.value) return   // 还没查询到患者时不接管手势
+  if (window.scrollY > 0) { pulling = false; return }
+  pulling = true
+  startY = e.touches[0].clientY
+}
+
+const onPullMove = (e) => {
+  if (!pulling) return
+  const delta = e.touches[0].clientY - startY
+  if (delta <= 0) { pulling = false; pullDistance.value = 0; return }
+  pullDistance.value = Math.min(delta * 0.4, PULL_MAX)
+  e.preventDefault()
+}
+
+const onPullEnd = async () => {
+  if (!pulling) return
+  pulling = false
+  if (pullDistance.value >= PULL_THRESHOLD) {
+    refreshing.value = true
+    pullDistance.value = PULL_MAX
+    await loadData()
+    refreshing.value = false
+    // loadData 内部会在查不到患者时 warning 并 return，此时 patient 仍为空 → 不弹成功
+    if (patient.value) ElMessage.success('已刷新')
+  }
+  pullDistance.value = 0
+}
+
+/** 切换患者：清空当前数据，回到手机号输入态（公用设备上下一个患者用） */
+const resetPatient = () => {
+  patient.value = null
+  queryPhone.value = ''
+  registrations.value = []
+  records.value = []
+  queueGroups.value = []
+  historyExpanded.value = false
+  tab.value = 'registrations'
+}
+
 /** 费用类型中文（由后端下发的 feeType 推导，不依赖额外数据库列） */
 const feeLabel = (t) =>
   ({ REGISTRATION: '挂号费', DRUG: '药费', MIXED: '挂号费+药费' }[t] || '费用')
@@ -247,6 +323,11 @@ const payByReg = (r, b) => {
   showPay.value = true
 }
 
+/**
+ * 支付账单。后端 BillService.pay() 第一步就是 `status != 0 → 抛"账单状态异常"`，
+ * 这个异常不代表支付失败，而是"这张单已经被付掉了"（自己重复点、或已在 PC 收银台付过），
+ * 所以按 info 提示并自动刷新，而不是甩一个红色的"支付失败"。
+ */
 const confirmPay = async () => {
   paying.value = true
   try {
@@ -254,7 +335,19 @@ const confirmPay = async () => {
     ElMessage.success('支付成功')
     showPay.value = false
     await loadData()
-  } catch (e) { ElMessage.error('支付失败') }
+  } catch (e) {
+    const msg = e?.response?.data?.message || ''
+    if (msg.includes('状态') || msg.includes('不存在')) {
+      ElMessage.info('该账单已结清，正在为你刷新')
+      showPay.value = false
+      await loadData()
+    } else if (!e?.response) {
+      // 请求根本没到后端 —— 不可能产生扣款，明确说明以免用户重复操作
+      ElMessage.error('网络异常，未完成支付，请检查连接后重试')
+    } else {
+      ElMessage.error(msg || '支付失败')
+    }
+  }
   finally { paying.value = false }
 }
 
@@ -262,7 +355,26 @@ onMounted(() => { if (queryPhone.value) loadData() })
 </script>
 
 <style scoped>
-.mobile-page { max-width: 480px; margin: 0 auto; padding-bottom: 70px; background: #f5f7fa; min-height: 100vh; font-size: 14px; }
+/* 已识别患者条：姓名 + 手机号 + 切换 */
+.patient-bar {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 12px; background: #fff; border-bottom: 1px solid #f0f0f0;
+}
+.pb-name { font-size: 15px; font-weight: 600; color: #303133; }
+.pb-phone { flex: 1; color: #909399; font-size: 12px; }
+
+/* ===== 下拉刷新 ===== */
+.pull-wrap { position: relative; }
+.pull-indicator {
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  overflow: hidden; background: #f5f7fa; color: #909399; font-size: 12px;
+}
+.pull-arrow { display: inline-block; transition: transform .2s; }
+.pull-arrow.ready { transform: rotate(180deg); }
+
+/* 底部导航 + 安全区：iPhone 底部有 Home Indicator，padding 必须叠加 env()，
+   不支持 env() 的环境会回退为 0，不影响桌面浏览器预览 */
+.mobile-page { max-width: 480px; margin: 0 auto; padding-bottom: calc(70px + env(safe-area-inset-bottom)); background: #f5f7fa; min-height: 100vh; font-size: 14px; }
 .mobile-header { background: #409EFF; color: #fff; padding: 16px; text-align: center; }
 .mobile-header h2 { margin: 0; font-size: 18px; font-weight: 500; }
 .phone-bar { padding: 16px; background: #fff; }
@@ -293,7 +405,8 @@ onMounted(() => { if (queryPhone.value) loadData() })
 .amount { color: #f56c6c; font-weight: 600; }
 .record-header { margin-bottom: 6px; font-size: 13px; color: #606266; display: flex; align-items: center; justify-content: space-between; }
 .record-diag { font-size: 14px; font-weight: 500; margin-bottom: 4px; }
-.record-content { font-size: 12px; color: #909399; line-height: 1.5; }
+/* 无诊断结论时的占位文案（正文 content 密文不下发，见模板注释） */
+.record-tip { font-size: 12px; color: #909399; line-height: 1.5; }
 .queue-board { background: #fff; border-radius: 10px; padding: 8px; margin-bottom: 10px; }
 /* 排队看板顶部：只针对「今天」，故日期只出现一次 */
 .queue-day-bar { display: flex; align-items: baseline; justify-content: space-between; padding: 2px 4px 10px; }
@@ -319,7 +432,4 @@ onMounted(() => { if (queryPhone.value) loadData() })
 .q-name { flex: 1; font-size: 14px; }
 .q-status { font-size: 12px; color: #67c23a; }
 .empty-hint { text-align: center; color: #909399; padding: 40px 0; }
-.bottom-nav { position: fixed; bottom: 0; left: 0; right: 0; max-width: 480px; margin: 0 auto; display: flex; background: #fff; border-top: 1px solid #e4e7ed; padding: 8px 0; }
-.nav-item { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 11px; color: #909399; cursor: pointer; }
-.nav-item.active { color: #409EFF; }
 </style>
