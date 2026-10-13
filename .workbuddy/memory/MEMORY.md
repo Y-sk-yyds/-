@@ -19,6 +19,7 @@
 - `remain_num` 由 SQL 统一重算（`total_num − status<>0 的挂号数`），**禁止手算**；过去日期排班 `deleted=1` 归档
 - 库名 `clinic_db`；**密码不硬记明文** → **Read** `backend/src/main/resources/application.yml` 的 `datasource.password`（Read 返回未被脱敏，可直接用）
 - 🔴 **`reset.bat:9` 里写的 `-p789456` 与 `application.yml` 实际口令不一致 → reset.bat 现在跑不通**（MySQL 已拒绝该口令）。修法：把 reset.bat 的 `-p` 改掉即可，**不要另造第二套重置流程**（仍然是 `mysql < sql/init.sql` + `docker exec clinic-redis redis-cli FLUSHDB`）
+- 🔑 **改 MySQL 密码后必须同步 4 处**：`application.yml` · `application-docker.yml` · `.env`(`MYSQL_PASSWORD`) · `reset.bat`；⚠️ **docker 容器的环境变量只在首次初始化时生效**，容器已跑着时改 `.env` 不改库里的密码，得先 `ALTER USER` 再同步 `.env`，否则 `down && up` 重建会用旧密码。⚠️ **别碰 `aes.secret-key`** —— 改了必须重新生成 `sql/init.sql`，否则病历密文全解不开
 - `init.sql` 密文 = AES-256-CBC(key=`clinic-aes-secret-key-for-256bit`, IV=`ClinicSystem-IV-`, PKCS7, Base64)；**换密钥必须重加密种子**（AES 历史：`clinic-aes-key-32bytes-secret!!` 是旧 AES-128 版）
 
 ## 药品效期两级管控（两条线互不干扰）
@@ -46,8 +47,17 @@
 | 收费 | ADM+CASHIER | ADM+CASHIER |
 | 用户 | 仅 ADM | 仅 ADM |
 
-- 模式：`private void requireRole(String... roles)` → `SecurityUtils.getCurrentRole()`；异常 `ForbiddenException` → 403。⚠️ 该方法**在 7 个 Controller 里各复制一份**（改逻辑要改 7 处）；前端 `meta.roles` **只配了 7 个页面**（patient/registration/prescription 未配）
+- **模式**：`private void requireRole(String... roles)` → `SecurityUtils.getCurrentRole()`；异常 `ForbiddenException` → 403。⚠️ 该方法**在 7 个 Controller 里各复制一份**（改逻辑要改 7 处）；前端 `meta.roles` **只配了 7 个页面**（patient/registration/prescription 未配）。⚠️ **病历模块的第 8 处 `checkRecordAccess()` 是黑名单且 null 放行**（只挡 CASHIER，新角色默认能看病历）
 - 🔑 **RBAC 三层**：菜单 `v-if`（Pinia）→ 路由 `meta.roles`（localStorage）→ 后端 `requireRole`（token 签名 role）。**前两层数据源都在 localStorage、客户端可改 → 只是 UX；第三层才是安全防线**（改 localStorage 能看菜单但接口仍 403）
+- 🔴 **三处越权：2026-10-11 已深度分析、方案已定、用户决定先不修（先写论文）** —— 执行时照做即可，不用重新分析：
+  | 位置 | 缺什么 | 改法 |
+  |---|---|---|
+  | `ConsultationController.complete()` 第 199–204 行 | 只 `requireRole`，**未比对 `consultation.getDoctorId()`** → 任何医生能改别人诊断/医嘱 + 生成病历 | 把 `getById(id)` 提到最前先校验归属（`doctorMapper` 第 58 行已注入） |
+  | `PrescriptionController.create()` 第 151–156 行 | 未校验 `consultationId` 归属 → 能给别人开方、扣别人库存 + 药费单挂别人名下 | 加 4 行比对（`consultationService` 第 63 行已注入） |
+  | `RegistrationController.list()` | `if (doctorId == null)` 才推断 → 传了就绕过，能看别人挂号 | 改无条件覆盖。**⚠️ 待用户拍板业务问题**：改后医生只能看自己挂号 |
+- 🔴 **移动端 5 个安全点**（`/api/mobile/**` 全 `permitAll`，身份只靠手机号）：① `my-data` 只凭手机号返回全部病历诊断 ② `payBill` 只认 billId 不认归属（**连手机号都不需要**）③ `register`/`createPatient` 可用别人手机号替他挂号建档 ④ 排队看板下发同排班所有患者姓名 ⑤ 无任何限流。
+  **可改方案已定（不推翻免登录设计）**：A=`my-data` 不下发 `content` 密文 / B=他人姓名脱敏 / C=`payBill` 带 phone 校验归属 / E=加 IP 限流。**D=短信验证码是真正的解法但毕设不做**（答辩话术：生产环境会接短信二次核验）。⚠️ H5 性质比 PC 端轻（产品设计换来的），优先级低于 PC 三处
+- 🔑 **用户已理解的判定标准**："如果一个接口只能靠前端不给你按钮来防住，那它就是没防住。" 攻击面：Postman（图形化不用写代码）/ F12 console / 脚本；**id 是自增主键可挨个猜**
 - 医生数据过滤统一在 Controller 层：`SecurityUtils.getCurrentUserId()` → DoctorMapper → doctorId；ADM/CASHIER 无 Doctor 实体，看全部
 
 ## 关键工作流与坑
@@ -84,7 +94,10 @@
 ## 已定决策（勿重提）
 - ❌ 医保报销：**不做**，按自费（话术：属院端 HIS / 医保局接口范畴）
 - ❌ PC 端挂号改"先缴费"、挂号队列号并发重复、localStorage→sessionStorage：**不修**（话术绕开）
+- ❌ **云服务器部署：不做**（2026-10-11 用户决定）。连带作废 SSH 密码重置 / 上云 / `CorsConfig` 加生产域名。`docker-compose.yml` + `nginx.conf` 保留作**本地整套环境**编排，不删
+- ❌ **弹窗改底部抽屉**（2026-10-10 用户实测否掉，要求保持居中）；❌ **H5 不换 Vant**
 - ⚠️ 分单结算 / 挂号即缴费**未加任何数据库列**
+- ⚠️ **论文不在本仓库写**（2026-10-11，用户在别处做）→ 论文 docx 那批待办不再跟进；但 `docs/技术文档.md` 仍在本仓库，AES-128→256 要同步
 
 ## RabbitMQ · 复诊提醒线现状（2026-10-08 读源码核实）
 - 拓扑：Direct exchange `clinic.reminder.exchange` → routing key `clinic.reminder` → durable queue `clinic.reminder.queue` → `@RabbitListener ReminderConsumer` → 写 `reminder` 表（status=0）；`@Scheduled(cron="0 0 8 * * ?")` 每天 8 点把当天到期改 status=1
